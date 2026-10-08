@@ -79,8 +79,8 @@ the exact System Settings pane.
 
 Both run the same dashboard on the same local server.
 
-- **Web app / PWA** — installs to the Dock with full browser APIs (Touch ID, Web Push, save-to-file, screen capture).
-- **Native Mac app** (`native/`) — a WKWebView shell with a menu-bar extra (Rescan · Clean up · Open Monitor) and a JS↔native bridge for native notifications, save/open dialogs, clipboard, screen wake lock, Dock badge and a Touch ID-gated signing key.
+- **Web app / PWA**: installs to the Dock with full browser APIs (Touch ID, Web Push, save-to-file, screen capture).
+- **Native Mac app** (`native/`): a WKWebView shell with a menu-bar extra (Rescan · Clean up · Open Monitor) and a JS↔native bridge for native notifications, save/open dialogs, clipboard, screen wake lock, Dock badge and a Touch ID-gated signing key.
 
 ## Interface
 
