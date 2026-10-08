@@ -7,6 +7,7 @@ This file is generated from the git history. Refresh it with `npm run changelog`
 
 ### Added
 
+- Add GitHub release workflow for tagged versions ([9e869bf](https://github.com/jesse-chelin/vantage/commit/9e869bf))
 - Add auto-generated changelog and in-app What's new view ([a899f95](https://github.com/jesse-chelin/vantage/commit/a899f95))
 - Add updating overlay, live version label, and restart detection ([d7b58df](https://github.com/jesse-chelin/vantage/commit/d7b58df))
 - Notify when a Vantage update is available ([16497b0](https://github.com/jesse-chelin/vantage/commit/16497b0))
