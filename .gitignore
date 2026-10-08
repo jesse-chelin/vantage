@@ -1,0 +1,11 @@
+node_modules/
+data/
+*.log
+.DS_Store
+
+# Native build outputs — regenerate with native/build.sh
+native/Vantage.app/
+native/make-icon
+native/.make-icon
+native/.icon-1024.png
+native/.AppIcon.iconset/

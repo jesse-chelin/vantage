@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Vantage</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖥️</text></svg>" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <meta name="theme-color" content="#0b0d12" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Vantage" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <button class="workspace" id="workspace-btn" type="button" title="Profile & preferences">
+            <div class="workspace-avatar">V</div>
+            <div class="workspace-meta">
+              <span class="workspace-name">Vantage</span>
+              <span class="workspace-sub" id="machine-line">Loading…</span>
+            </div>
+          </button>
+          <button class="search-trigger" id="search-trigger" type="button">
+            <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M6.6 1.5a5.1 5.1 0 1 0 3.1 9.1l3.1 3.1a.9.9 0 1 0 1.3-1.3l-3.1-3.1A5.1 5.1 0 0 0 6.6 1.5Zm0 1.6a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Z" fill="currentColor"/></svg>
+            <span class="search-trigger-label">Search</span>
+            <kbd>⌘K</kbd>
+          </button>
+        </div>
+
+        <nav class="sidebar-nav" id="nav"></nav>
+
+        <div class="sidebar-foot">
+          <div class="machine" id="machine-card"></div>
+          <div class="foot-row">
+            <div class="scan-status" id="scan-status"></div>
+            <button class="btn subtle" id="refresh" type="button">Refresh</button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="nav-scrim" id="nav-scrim"></div>
+
+      <main class="content">
+        <div class="progress" id="progress"></div>
+        <header class="topbar">
+          <button class="menu-btn" id="menu-btn" type="button" aria-label="Toggle navigation">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/></svg>
+          </button>
+          <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Toggle sidebar" title="Toggle sidebar (⌘\)">
+            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="3" width="12.4" height="10" rx="2"/><path d="M6.4 3v10"/></svg>
+          </button>
+          <div class="topbar-title">
+            <h1 id="view-title">Overview</h1>
+            <p class="view-sub" id="view-sub"></p>
+          </div>
+          <div class="topbar-actions">
+            <label class="filter-field">
+              <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M6.6 1.5a5.1 5.1 0 1 0 3.1 9.1l3.1 3.1a.9.9 0 1 0 1.3-1.3l-3.1-3.1A5.1 5.1 0 0 0 6.6 1.5Zm0 1.6a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Z" fill="currentColor"/></svg>
+              <input id="filter" type="search" placeholder="Filter this view" autocomplete="off" />
+            </label>
+            <span id="mode-badge"></span>
+          </div>
+        </header>
+        <div class="content-scroll">
+          <div class="view" id="view"></div>
+        </div>
+      </main>
+    </div>
+
+    <div class="palette-root" id="palette-root"></div>
+    <div class="modal-root" id="modal-root"></div>
+    <div class="panel-root" id="panel-root"></div>
+    <div class="settings-root" id="settings-root"></div>
+    <div class="onboarding-root" id="onboarding-root"></div>
+    <div class="toast-root" id="toast-root" role="status" aria-live="polite"></div>
+    <div class="job-dock" id="job-dock"></div>
+    <div id="dev-root"></div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
