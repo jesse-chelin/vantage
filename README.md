@@ -7,6 +7,31 @@ Everything is local, loopback-only, and guarded by a per-run token. All shell
 actions use fixed binaries and validated arguments (no arbitrary command
 strings).
 
+## Install on another Mac
+
+One command, then run again any time to update:
+
+```sh
+git clone <your-repo-url> ~/Projects/ai-dashboard && ~/Projects/ai-dashboard/install.sh
+```
+
+`install.sh` checks Node (20+), pulls the latest code, starts the server as a
+login service (`local.ai-dashboard`), builds the native app when Xcode tools are
+present, and opens the dashboard. Options: `--native`, `--no-native`, `--uninstall`.
+Override the location with `VANTAGE_DIR` or the port with `PORT`.
+
+Update later with the same script (it fast-forwards your checkout) or:
+
+```sh
+~/Projects/ai-dashboard/update.sh
+```
+
+If you paste the repo onto GitHub as public, curl works too:
+
+```sh
+VANTAGE_REPO=https://github.com/<you>/ai-dashboard.git sh -c "$(curl -fsSL https://raw.githubusercontent.com/<you>/ai-dashboard/main/install.sh)"
+```
+
 ## Quick start
 
 ```sh
