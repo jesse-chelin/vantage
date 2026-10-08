@@ -49,7 +49,12 @@ git clone git@github.com:jesse-chelin/vantage.git ~/Projects/vantage && ~/Projec
 
 `install.sh` checks Node, pulls the code, starts Vantage as a **login service**
 (`local.vantage`), builds the native app when Xcode tools are present, and opens
-the dashboard. Re-run the same command any time to update, or use the wrapper:
+the dashboard.
+
+Vantage also updates itself. When new commits land on `main`, a small **Update**
+chip appears in the toolbar, and **Settings → About** shows the version and
+status. One click pulls the changes, restarts the service, and reconnects the
+page. Prefer the terminal? Re-run the install command, or use the wrapper:
 
 ```sh
 ~/Projects/vantage/update.sh
@@ -108,6 +113,7 @@ Linear-inspired, dark-first, keyboard-driven.
 | `GET`/`PATCH` | `/api/settings` | Aggregated settings |
 | `POST` | `/api/settings/{export,import,reset}` · `/api/upload` | Backup / restore / ingest |
 | `GET`/`POST` | `/api/onboarding` · `/api/setup` | First-run state & diagnostics |
+| `GET`/`POST` | `/api/update` · `/api/update/apply` | Check for / apply in-app updates |
 
 ## Layout
 
