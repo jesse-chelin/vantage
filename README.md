@@ -101,6 +101,14 @@ node bin/changelog.js --stdout   # preview without writing
 The same data is available in the app under **Settings → About → What's new**,
 and the updating overlay lists the commits it just pulled.
 
+Releases are cut by pushing a version tag. A GitHub Action then publishes a
+GitHub Release whose notes are generated from that tag's commits (tags with a
+hyphen, like `v0.9.0-beta`, are marked as pre-releases):
+
+```sh
+git tag v0.9.1 && git push origin v0.9.1
+```
+
 ## Web app vs native Mac app
 
 Both run the same dashboard on the same local server.

@@ -41,3 +41,20 @@ test('changelog.toMarkdown handles an empty history', () => {
   const markdown = changelog.toMarkdown({ repoUrl: 'https://example.com', sections: [] });
   assert.match(markdown, /_No changes recorded yet\._/);
 });
+
+test('changelog.toMarkdownSection renders a single release for notes', () => {
+  const markdown = changelog.toMarkdownSection({
+    version: 'v2.0.0',
+    date: '2026-02-02',
+    groups: [{ key: 'fixed', label: 'Fixed', icon: 'check', entries: [{ text: 'Squashed a bug', hash: 'def5678' }] }],
+  }, 'https://example.com/repo');
+  assert.match(markdown, /^## v2\.0\.0 \(2026-02-02\)/);
+  assert.match(markdown, /### Fixed/);
+  assert.match(markdown, /Squashed a bug/);
+  assert.match(markdown, /https:\/\/example\.com\/repo\/commit\/def5678/);
+});
+
+test('changelog.toMarkdownSection tolerates a release with no entries', () => {
+  const markdown = changelog.toMarkdownSection({ version: 'v3.0.0', groups: [] });
+  assert.match(markdown, /_No notable changes\._/);
+});

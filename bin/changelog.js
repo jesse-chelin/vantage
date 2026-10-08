@@ -17,6 +17,24 @@ const args = process.argv.slice(2);
 (async () => {
   const data = await changelog.report();
 
+  // --section <tag>: print just one release, for GitHub Release notes.
+  const sectionFlag = args.indexOf('--section');
+  if (sectionFlag !== -1) {
+    const name = args[sectionFlag + 1];
+    if (!name) {
+      console.error('Usage: node bin/changelog.js --section <tag>');
+      process.exit(1);
+    }
+    const norm = (value) => String(value).replace(/^v/, '');
+    const section = data.sections.find((s) => s.version === name || norm(s.version) === norm(name));
+    if (!section) {
+      console.error(`No changelog section found for "${name}".`);
+      process.exit(1);
+    }
+    process.stdout.write(changelog.toMarkdownSection(section, data.repoUrl));
+    return;
+  }
+
   if (args.includes('--json')) {
     process.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
     return;
