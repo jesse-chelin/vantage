@@ -11,7 +11,7 @@ Scope: $ARGUMENTS
 
 Do this in order:
 
-1. **Fan out — launch all three subagents in parallel**, each with
+1. **Fan out, launch all three subagents in parallel**, each with
    `background: true`, in a single batch of calls:
    - `bug-hunter`
    - `security-auditor`
@@ -38,5 +38,5 @@ Do this in order:
 5. **Summarize in chat**: the top findings with severities, the overall count,
    and the report path.
 
-Do not fix anything in this run — this is discovery only. Do not modify
+Do not fix anything in this run, this is discovery only. Do not modify
 `server.js`, `lib/`, `public/`, or `test/`.

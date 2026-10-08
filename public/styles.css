@@ -146,6 +146,12 @@ body.modal-open .content-scroll { overflow: hidden; }
 }
 .workspace-meta { display: flex; flex-direction: column; min-width: 0; }
 .workspace-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.beta-tag {
+  display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 5px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  vertical-align: 1px; color: var(--accent-2); background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
 .workspace-sub { font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .search-trigger {

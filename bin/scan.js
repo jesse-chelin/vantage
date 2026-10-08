@@ -12,7 +12,7 @@ const path = require('node:path');
 const { scanAll } = require('../lib/scanner');
 
 function fmtBytes(bytes) {
-  if (bytes == null) return '—';
+  if (bytes == null) return '–';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.min(Math.floor(Math.log(Math.max(1, bytes)) / Math.log(1024)), units.length - 1);
   return `${(bytes / 1024 ** i).toFixed(1)} ${units[i]}`;

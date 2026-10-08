@@ -1,5 +1,5 @@
 // Vantage native shell: a WKWebView in a real Mac window (transparent titlebar,
-// vibrancy) plus a menu-bar extra — and a JS↔native bridge so the shell supports
+// vibrancy) plus a menu-bar extra, and a JS↔native bridge so the shell supports
 // the capabilities the browser has (native notifications, save/open panels,
 // clipboard, wake lock, idle detection, sharing, Dock badge).
 //

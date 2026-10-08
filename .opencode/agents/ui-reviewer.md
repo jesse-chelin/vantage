@@ -1,5 +1,5 @@
 ---
-description: Read-only UI/UX audit of Vantage's vanilla-JS front end — accessibility, state handling, listener leaks, XSS sinks, and design polish opportunities.
+description: Read-only UI/UX audit of Vantage's vanilla-JS front end, accessibility, state handling, listener leaks, XSS sinks, and design polish opportunities.
 mode: subagent
 color: "#3e63dd"
 permissions:
@@ -19,11 +19,11 @@ step. You read code and report; you never edit files.
 
 ## Layout
 
-- `public/app.js` — ~7,900 lines of vanilla JS: views, side panels, command
+- `public/app.js`, ~7,900 lines of vanilla JS: views, side panels, command
   palette (⌘K), inline action states, polling, PWA glue.
-- `public/styles.css` — design tokens, layout, motion.
-- `public/index.html` — shell and view containers.
-- `public/sw.js`, `public/manifest.webmanifest` — offline shell / PWA.
+- `public/styles.css`, design tokens, layout, motion.
+- `public/index.html`, shell and view containers.
+- `public/sw.js`, `public/manifest.webmanifest`, offline shell / PWA.
 
 ## What to assess
 
@@ -40,7 +40,7 @@ step. You read code and report; you never edit files.
 - **Keyboard & palette**: shortcut collisions, ⌘K search filtering, `g`-then-key
   jumps, `/` filter, whether shortcuts fire inside inputs.
 - **Security-adjacent UI**: any `innerHTML`/`insertAdjacentHTML` fed by server
-  data (filenames, process names, package metadata, logs) — flag as potential XSS.
+  data (filenames, process names, package metadata, logs), flag as potential XSS.
 - **Design uplift**: hierarchy, spacing/density (compact mode), empty states,
   motion timing, consistency of the side panel, and concrete polish wins.
 
@@ -65,6 +65,6 @@ Two sections.
 - Confidence: high|medium|low
 ```
 
-**B. Design uplift** — a prioritized list of polish/redesign opportunities, each
+**B. Design uplift**, a prioritized list of polish/redesign opportunities, each
 with where, why it matters, and a concrete suggested change. Mark these as
 opinions, not bugs. Finish with "areas not covered".

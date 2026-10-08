@@ -11,6 +11,8 @@ from one fast console.
 
 Loopback-only · zero dependencies · nothing leaves your machine.
 
+> **Status: Beta (0.9).** Vantage is under active development and not yet 1.0.
+
 </div>
 
 ![Vantage](docs/screenshots/overview.png)
@@ -52,12 +54,17 @@ git clone git@github.com:jesse-chelin/vantage.git ~/Projects/vantage && ~/Projec
 the dashboard.
 
 Vantage also updates itself. When new commits land on `main`, a small **Update**
-chip appears in the toolbar, and **Settings → About** shows the version and
-status. One click pulls the changes, restarts the service, and reconnects the
-page. Prefer the terminal? Re-run the install command, or use the wrapper:
+chip appears in the toolbar, **Settings → About** shows the version and status,
+and a notification fires once per release (macOS banner and/or Web Push, even
+when the tab is closed). One click pulls the changes, restarts the service, and
+reconnects the page.
+
+Prefer the terminal? `update.sh` runs the same code path as the in-app updater:
 
 ```sh
-~/Projects/vantage/update.sh
+~/Projects/vantage/update.sh            # pull and restart
+~/Projects/vantage/update.sh --check    # exit 10 if an update is waiting
+~/Projects/vantage/update.sh --native   # also rebuild the native Mac app
 ```
 
 Flags: `--native`, `--no-native`, `--uninstall`. Override the location or port

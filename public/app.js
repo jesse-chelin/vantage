@@ -7128,7 +7128,7 @@ function settingsAbout() {
     ? `New commits available: ${u.subject || 'update ready'}.`
     : (u.error ? `Last check failed: ${u.error}` : 'Vantage keeps itself current from its git checkout.');
   return `${settingsGroup('Vantage',
-    sInfoRow('sparkle', 'Version', u.current ? `Total management for your Mac. Built from ${u.current}.` : 'Total management for your Mac.', '<span class="mono">1.0</span>') +
+    sInfoRow('sparkle', 'Version', u.current ? `Total management for your Mac. Built from ${u.current}.` : 'Total management for your Mac.', `<span class="mono">${esc(u.version || '0.9.0-beta')}</span> ${pill('beta', 'accent')}`) +
     sInfoRow('app', 'License', 'Open source under the MIT license.', '<span class="mono">MIT</span>') +
     sInfoRow('bolt', 'Setup', 'Re-run the onboarding wizard.', '<button class="btn small" data-settings-rerun>Run setup</button>')
   )}

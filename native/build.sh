@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds "Vantage.app" — a native WKWebView shell around the local server.
+# Builds "Vantage.app", a native WKWebView shell around the local server.
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 APP="$DIR/Vantage.app"
@@ -38,7 +38,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleExecutable</key><string>Vantage</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleShortVersionString</key><string>0.9.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleGetInfoString</key><string>Vantage 0.9.0 (Beta)</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSCameraUsageDescription</key><string>Vantage may use the camera for capture and scanning.</string>
