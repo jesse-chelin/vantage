@@ -87,6 +87,20 @@ the exact System Settings pane.
 - **macOS banners** posted by the server through `terminal-notifier`.
 - **Telegram** messages to your chat.
 
+## Changelog
+
+Every release is documented in [`CHANGELOG.md`](CHANGELOG.md), generated from the
+git history and grouped into Added / Changed / Fixed / Removed / Security /
+Performance / Documentation. Regenerate it any time with:
+
+```sh
+npm run changelog          # writes CHANGELOG.md
+node bin/changelog.js --stdout   # preview without writing
+```
+
+The same data is available in the app under **Settings → About → What's new**,
+and the updating overlay lists the commits it just pulled.
+
 ## Web app vs native Mac app
 
 Both run the same dashboard on the same local server.

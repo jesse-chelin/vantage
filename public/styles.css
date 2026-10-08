@@ -675,6 +675,32 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .update-note { margin: 14px 0 0; font-size: 12px; color: var(--text-2); }
 .update-note.bad { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; color: var(--red); }
 @keyframes update-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+/* Changelog ---------------------------------------------------------------- */
+.changelog { display: flex; flex-direction: column; }
+.changelog-section { padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.changelog-section:last-child { border-bottom: 0; }
+.changelog-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.changelog-version { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.changelog-date { margin-left: auto; font-size: 11px; color: var(--text-3); }
+.changelog-group { margin-top: 14px; }
+.changelog-group-title { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3); }
+.changelog-group-title svg { width: 13px; height: 13px; }
+.changelog-count { margin-left: auto; font-weight: 500; }
+.changelog-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.changelog-list li { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.changelog-list li::before { content: ''; flex: none; width: 5px; height: 5px; margin-top: 6px; border-radius: 50%; background: var(--accent); }
+.changelog-scope { flex: none; padding: 1px 6px; border-radius: 5px; font-size: 10.5px; font-weight: 600; color: var(--accent-2); background: var(--accent-soft); }
+.changelog-hash { margin-left: auto; flex: none; font-size: 10.5px; color: var(--text-3); text-decoration: none; }
+.changelog-hash:hover { color: var(--accent-2); }
+
+/* Update overlay: what's new list */
+.update-changes { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); text-align: left; }
+.uc-title { margin-bottom: 8px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3); }
+.update-changes ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow: auto; }
+.update-changes li { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--text-2); }
+.update-changes li code { margin-left: auto; font-size: 10.5px; color: var(--text-3); }
+.uc-more { margin-top: 6px; font-size: 11px; color: var(--text-3); }
 .sheet-note { color: var(--text-3); font-size: 11px; margin-top: 10px; }
 .clean-list { margin-top: 14px; display: flex; flex-direction: column; gap: 2px; text-align: left; }
 .clean-item { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: var(--r); font-size: 12.5px; cursor: pointer; }

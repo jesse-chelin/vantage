@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node server.js",
     "scan": "node bin/scan.js",
+    "changelog": "node bin/changelog.js",
     "test": "node --test test/"
   },
   "engines": {

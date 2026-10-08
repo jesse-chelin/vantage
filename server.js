@@ -60,6 +60,7 @@ const settings = require('./lib/settings');
 const onboarding = require('./lib/onboarding');
 const setup = require('./lib/setup');
 const update = require('./lib/update');
+const changelog = require('./lib/changelog');
 
 diag.install();
 
@@ -744,6 +745,10 @@ const server = http.createServer(async (req, res) => {
       const status = await update.status();
       notify.checkUpdate(status).catch(() => {});
       return sendJson(res, 200, status);
+    }
+
+    if (pathname === '/api/changelog') {
+      return sendJson(res, 200, await changelog.report());
     }
 
     if (pathname === '/api/update/apply' && req.method === 'POST') {

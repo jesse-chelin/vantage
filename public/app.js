@@ -6970,6 +6970,7 @@ function showUpdateOverlay() {
         <ul class="update-steps">
           ${UPDATE_STEPS.map(([id, label, icon]) => `<li class="update-step" data-step="${id}" data-state="pending"><span class="us-mark">${svg(icon)}</span><span class="us-label">${label}</span></li>`).join('')}
         </ul>
+        <div class="update-changes" data-update-changes hidden></div>
         <p class="update-note" data-update-note hidden></p>
       </div>
     </div>`;
@@ -7057,6 +7058,15 @@ async function applyUpdate() {
 
   setUpdateStep('pull', 'done');
   setUpdateStep('deps', result.depsChanged ? 'done' : 'skip');
+  if (result.commits && result.commits.length) {
+    const box = els.modalRoot && els.modalRoot.querySelector('[data-update-changes]');
+    if (box) {
+      const shown = result.commits.slice(0, 6);
+      const more = result.commits.length - shown.length;
+      box.hidden = false;
+      box.innerHTML = `<div class="uc-title">What's new</div><ul>${shown.map((c) => `<li><span>${esc(c.subject)}</span><code class="mono">${esc(c.hash)}</code></li>`).join('')}</ul>${more > 0 ? `<div class="uc-more">+${more} more</div>` : ''}`;
+    }
+  }
   setUpdateStep('restart', 'active');
   setUpdateTitle('Restarting Vantage', 'Bringing the new version back online.');
 
@@ -7073,6 +7083,36 @@ async function applyUpdate() {
   setUpdateStep('reconnect', 'done');
   await new Promise((resolve) => setTimeout(resolve, 900));
   location.reload();
+}
+
+function changelogBody(data) {
+  const sections = (data && data.sections) || [];
+  if (!sections.length) return `<div class="empty-note">No changes recorded yet.</div>`;
+  return `<div class="changelog">${sections.map((section) => `
+    <div class="changelog-section">
+      <div class="changelog-head">
+        <span class="changelog-version">${esc(section.version)}</span>
+        ${section.unreleased ? '<span class="pill accent">unreleased</span>' : ''}
+        ${section.date ? `<span class="changelog-date">${esc(section.date)}</span>` : ''}
+      </div>
+      ${section.groups.map((group) => `
+        <div class="changelog-group">
+          <div class="changelog-group-title">${svg(group.icon)}<span>${esc(group.label)}</span><span class="changelog-count">${group.entries.length}</span></div>
+          <ul class="changelog-list">
+            ${group.entries.map((entry) => `<li>${entry.scope ? `<span class="changelog-scope">${esc(entry.scope)}</span>` : ''}<span>${esc(entry.text)}</span><a class="changelog-hash mono" href="${esc(data.repoUrl || '')}/commit/${esc(entry.hash)}" target="_blank" rel="noopener">${esc(entry.hash)}</a></li>`).join('')}
+          </ul>
+        </div>`).join('')}
+    </div>`).join('')}</div>`;
+}
+
+async function openChangelog() {
+  openPanel({ title: "What's new", subtitle: 'Changes to Vantage', body: skeletonRows(5) });
+  try {
+    const data = await api('/api/changelog');
+    openPanel({ title: "What's new", subtitle: `${versionLabel()} · generated from git history`, body: changelogBody(data) });
+  } catch (error) {
+    openPanel({ title: "What's new", subtitle: 'Error', body: `<div class="empty-note">${esc(error.message)}</div>` });
+  }
 }
 
 async function openDiagnostics() {
@@ -7262,7 +7302,8 @@ function settingsAbout() {
     sInfoRow('bolt', 'Setup', 'Re-run the onboarding wizard.', '<button class="btn small" data-settings-rerun>Run setup</button>')
   )}
   ${settingsGroup('Updates',
-    sInfoRow('download', 'Vantage updates', updateSub, statusControl)
+    sInfoRow('download', 'Vantage updates', updateSub, statusControl) +
+    sInfoRow('sparkle', "What's new", 'Auto-generated changelog from the git history.', '<button class="btn small" data-settings-changelog>View</button>')
   )}
   ${settingsGroup('Links',
     sInfoRow('link', 'Repository', 'jesse-chelin/vantage', '<button class="btn small" data-settings-repo>Open</button>') +
@@ -7579,6 +7620,7 @@ els.view.addEventListener('click', (event) => {
   if (event.target.closest('[data-settings-releases]')) { window.open('https://github.com/jesse-chelin/vantage/releases'); return; }
   if (event.target.closest('[data-settings-check]')) { checkForUpdate(true); return; }
   if (event.target.closest('[data-settings-update]')) { applyUpdate(); return; }
+  if (event.target.closest('[data-settings-changelog]')) { openChangelog(); return; }
   if (event.target.closest('[data-settings-export]')) return exportSettings();
   if (event.target.closest('[data-settings-import]')) return importSettings();
   const reset = event.target.closest('[data-settings-reset]');
