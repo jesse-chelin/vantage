@@ -16,6 +16,7 @@ const els = {
   filter: document.getElementById('filter'),
   modeBadge: document.getElementById('mode-badge'),
   updateChip: document.getElementById('update-chip'),
+  footVersion: document.getElementById('foot-version'),
   modalRoot: document.getElementById('modal-root'),
   toastRoot: document.getElementById('toast-root'),
   jobDock: document.getElementById('job-dock'),
@@ -39,6 +40,7 @@ const state = {
   filter: '',
   jobs: new Map(),
   update: { checked: false, supported: true, available: false },
+  boot: null,
 };
 
 // --- motion + progress -----------------------------------------------------
@@ -5954,6 +5956,16 @@ if (els.updateChip) {
   });
 }
 
+if (els.footVersion) {
+  els.footVersion.addEventListener('click', (event) => {
+    if (event.target.closest('[data-update-open]')) openSettings('about');
+  });
+}
+
+els.modalRoot.addEventListener('click', (event) => {
+  if (event.target.closest('[data-update-dismiss]')) closeUpdateOverlay();
+});
+
 els.filter.addEventListener('input', () => {
   state.filter = els.filter.value;
   applyFilter();
@@ -6770,6 +6782,14 @@ async function initCapabilities() {
   initDragDrop();
   syncWakeLock();
   syncBadge();
+  try {
+    const h = await fetch('/api/health', { cache: 'no-store' }).then((r) => r.json());
+    state.boot = h.boot || null;
+    if (h.version) state.update = { ...(state.update || {}), version: h.version };
+  } catch {
+    /* server not up yet */
+  }
+  renderVersion();
   checkForUpdate();
   setInterval(() => { if (!document.hidden) checkForUpdate(); }, 6 * 60 * 60 * 1000);
 }
@@ -6894,17 +6914,32 @@ async function checkForUpdate(manual = false) {
     const wasAvailable = state.update && state.update.available;
     state.update = { ...data, checked: true };
     renderUpdateChip();
+    renderVersion();
     if (state.view === 'settings' && settingsState.section === 'about') renderSettingsSection();
     if (manual) {
       if (!data.supported) toast('This install is not a git checkout, so it cannot self-update.', '');
       else if (data.available) toast(`Update available: ${data.behind} commit${data.behind === 1 ? '' : 's'} behind.`, '');
-      else toast('Vantage is up to date.', 'good');
+      else toast(`Vantage is up to date (${data.current || 'local'}).`, 'good');
     } else if (data.available && !wasAvailable) {
       toast(`A Vantage update is available (${data.behind} commit${data.behind === 1 ? '' : 's'}).`, '');
     }
   } catch (error) {
     if (manual) toast(`Update check failed: ${error.message}`, 'error');
   }
+  renderVersion();
+}
+
+function versionLabel(u = state.update || {}) {
+  const raw = u.version || '0.9.0-beta';
+  return `v${raw.replace(/-beta$/, '')} beta`;
+}
+
+function renderVersion() {
+  if (!els.footVersion) return;
+  const u = state.update || {};
+  const build = u.current ? ` · ${u.current}` : '';
+  const hint = u.available ? `${u.behind} update${u.behind === 1 ? '' : 's'} available` : 'up to date';
+  els.footVersion.innerHTML = `<button class="foot-version-btn" type="button" data-update-open title="Vantage ${esc(versionLabel(u))}${build} · ${hint}">${esc(versionLabel(u))}${esc(build)}</button>`;
 }
 
 function renderUpdateChip() {
@@ -6914,35 +6949,129 @@ function renderUpdateChip() {
   els.updateChip.innerHTML = `<button class="update-chip" data-update-apply title="Update available: ${esc(u.subject || '')}">${svg('download')}<span>Update</span></button>`;
 }
 
-async function waitForServer(timeoutMs = 60_000) {
+const UPDATE_STEPS = [
+  ['pull', 'Pull the latest changes', 'download'],
+  ['deps', 'Refresh dependencies', 'box'],
+  ['restart', 'Restart the service', 'restart'],
+  ['reconnect', 'Reconnect', 'pulse'],
+];
+
+function showUpdateOverlay() {
+  if (!els.modalRoot) return;
+  if (sheetCloseTimer) { clearTimeout(sheetCloseTimer); sheetCloseTimer = null; }
+  els.modalRoot.className = 'modal-root open';
+  syncScrollLock();
+  els.modalRoot.innerHTML = `
+    <div class="overlay">
+      <div class="update-card" role="alertdialog" aria-modal="true" aria-live="polite">
+        <div class="update-glyph"><span class="update-spinner"></span>${svg('download')}</div>
+        <h2 class="update-title">Updating Vantage</h2>
+        <p class="update-sub">Pulling the latest changes and restarting. This takes a few seconds.</p>
+        <ul class="update-steps">
+          ${UPDATE_STEPS.map(([id, label, icon]) => `<li class="update-step" data-step="${id}" data-state="pending"><span class="us-mark">${svg(icon)}</span><span class="us-label">${label}</span></li>`).join('')}
+        </ul>
+        <p class="update-note" data-update-note hidden></p>
+      </div>
+    </div>`;
+}
+
+function setUpdateStep(id, stepState) {
+  const el = els.modalRoot && els.modalRoot.querySelector(`.update-step[data-step="${id}"]`);
+  if (!el) return;
+  el.dataset.state = stepState;
+  const mark = el.querySelector('.us-mark');
+  if (!mark) return;
+  if (!mark.dataset.icon) mark.dataset.icon = mark.innerHTML;
+  if (stepState === 'done') mark.innerHTML = svg('check');
+  else if (stepState === 'failed') mark.innerHTML = svg('warning');
+  else mark.innerHTML = mark.dataset.icon;
+}
+
+function setUpdateTitle(title, sub) {
+  const t = els.modalRoot && els.modalRoot.querySelector('.update-title');
+  const s = els.modalRoot && els.modalRoot.querySelector('.update-sub');
+  if (t && title) t.textContent = title;
+  if (s && sub) s.textContent = sub;
+}
+
+function showUpdateError(message) {
+  const card = els.modalRoot && els.modalRoot.querySelector('.update-card');
+  if (card) card.classList.add('failed');
+  const note = els.modalRoot && els.modalRoot.querySelector('[data-update-note]');
+  if (note) {
+    note.hidden = false;
+    note.innerHTML = `${esc(message)} <button class="btn small" type="button" data-update-dismiss>Close</button>`;
+  }
+}
+
+function closeUpdateOverlay() {
+  if (!els.modalRoot) return;
+  els.modalRoot.className = 'modal-root';
+  els.modalRoot.innerHTML = '';
+  syncScrollLock();
+}
+
+// Waits until the server reports a new boot id, which means the update restarted it.
+async function waitForRestart(previousBoot, timeoutMs = 90_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
       const response = await fetch('/api/health', { cache: 'no-store' });
-      if (response.ok) return true;
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (response.ok) {
+        const data = await response.json().catch(() => ({}));
+        if (!previousBoot || (data.boot && data.boot !== previousBoot)) return data;
+      }
+    } catch {
+      /* server is restarting */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 800));
   }
-  return false;
+  return null;
 }
 
 async function applyUpdate() {
   const u = state.update || {};
   const ok = await confirmSheet({
     label: 'Update Vantage',
-    description: `Pull ${u.behind || 'the latest'} new commit${u.behind === 1 ? '' : 's'} and restart the server. The dashboard reconnects in a few seconds.`,
+    description: `Pull ${u.behind || 'the latest'} new commit${u.behind === 1 ? '' : 's'} and restart. The dashboard reconnects automatically.`,
     danger: 'medium',
   }, {}, null);
   if (!ok) return;
+
+  if (!state.boot) {
+    try { state.boot = (await fetch('/api/health', { cache: 'no-store' }).then((r) => r.json())).boot || null; } catch {}
+  }
+  const previousBoot = state.boot;
+
+  showUpdateOverlay();
+  setUpdateStep('pull', 'active');
+
+  let result;
   try {
-    toast('Updating Vantage…', '');
-    await api('/api/update/apply', { method: 'POST', body: {} });
+    result = await api('/api/update/apply', { method: 'POST', body: {} });
   } catch (error) {
-    toast(`Update failed: ${error.message}`, 'error');
+    setUpdateStep('pull', 'failed');
+    showUpdateError(`Update failed: ${error.message}`);
     return;
   }
-  const back = await waitForServer();
-  if (!back) { toast('Vantage is restarting. Reload the page in a moment.', ''); return; }
+
+  setUpdateStep('pull', 'done');
+  setUpdateStep('deps', result.depsChanged ? 'done' : 'skip');
+  setUpdateStep('restart', 'active');
+  setUpdateTitle('Restarting Vantage', 'Bringing the new version back online.');
+
+  const health = await waitForRestart(previousBoot);
+  if (!health) {
+    showUpdateError('Vantage is still restarting. Reload the page in a moment.');
+    return;
+  }
+  state.boot = health.boot || null;
+
+  setUpdateStep('restart', 'done');
+  setUpdateStep('reconnect', 'active');
+  setUpdateTitle('Updated', 'Reloading the dashboard…');
+  setUpdateStep('reconnect', 'done');
+  await new Promise((resolve) => setTimeout(resolve, 900));
   location.reload();
 }
 

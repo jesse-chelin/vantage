@@ -210,6 +210,12 @@ body.modal-open .content-scroll { overflow: hidden; }
 .machine-foot { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); }
 .foot-row { display: flex; align-items: center; gap: 8px; }
 .scan-status { flex: 1; min-width: 0; font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.foot-version { display: flex; }
+.foot-version-btn {
+  padding: 0; border: 0; background: none; cursor: pointer; font: inherit;
+  font-size: 10.5px; font-family: var(--mono); color: var(--text-3); letter-spacing: 0.01em;
+}
+.foot-version-btn:hover { color: var(--text-2); }
 
 /* Content ----------------------------------------------------------------- */
 
@@ -629,6 +635,46 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .sheet input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .sheet-actions { display: flex; gap: 8px; padding: 0 16px 16px; }
 .sheet-actions .btn { flex: 1; justify-content: center; padding: 7px; }
+
+/* Updating overlay --------------------------------------------------------- */
+.update-card {
+  width: min(400px, calc(100vw - 48px)); padding: 26px 24px 22px; text-align: center;
+  background: var(--surface); border: 1px solid var(--border-2); border-radius: var(--r-xl);
+  box-shadow: var(--shadow-pop); animation: pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+.modal-root.closing .update-card { animation: pop-out 0.16s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.update-glyph {
+  position: relative; width: 48px; height: 48px; margin: 0 auto 14px; display: grid; place-items: center;
+  border-radius: 50%; background: var(--accent-soft); color: var(--accent-2);
+}
+.update-glyph > svg { width: 22px; height: 22px; position: relative; z-index: 1; }
+.update-glyph.failed { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
+.update-glyph.failed .update-spinner { display: none; }
+.update-spinner {
+  position: absolute; inset: -4px; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+.update-title { margin: 0 0 6px; font-size: 15px; font-weight: 600; color: var(--text); }
+.update-sub { margin: 0 0 16px; font-size: 12.5px; color: var(--text-2); }
+.update-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.update-step {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--r);
+  font-size: 12.5px; color: var(--text-3); transition: background 0.15s ease, color 0.15s ease;
+}
+.us-mark { flex: none; width: 18px; height: 18px; display: grid; place-items: center; }
+.us-mark svg { width: 15px; height: 15px; }
+.update-step[data-state="active"] { background: var(--surface-2); color: var(--text); }
+.update-step[data-state="active"] .us-mark { color: var(--accent-2); animation: update-pulse 1s ease-in-out infinite; }
+.update-step[data-state="done"] { color: var(--text-2); }
+.update-step[data-state="done"] .us-mark { color: var(--green); }
+.update-step[data-state="failed"] { color: var(--red); }
+.update-step[data-state="failed"] .us-mark { color: var(--red); }
+.update-step[data-state="skip"] { opacity: 0.55; }
+.update-note { margin: 14px 0 0; font-size: 12px; color: var(--text-2); }
+.update-note.bad { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; color: var(--red); }
+@keyframes update-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
 .sheet-note { color: var(--text-3); font-size: 11px; margin-top: 10px; }
 .clean-list { margin-top: 14px; display: flex; flex-direction: column; gap: 2px; text-align: left; }
 .clean-item { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: var(--r); font-size: 12.5px; cursor: pointer; }

@@ -19,6 +19,10 @@ const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 
+const APP_VERSION = require('./package.json').version;
+// Changes on every process start; lets the client detect a restart after an update.
+const BOOT_ID = crypto.randomBytes(6).toString('hex');
+
 const { scanAll } = require('./lib/scanner');
 const { run } = require('./lib/exec');
 const { listActions, getActionMeta, runAction, undoAction, getJob, listJobs, openclawState, HttpError } = require('./lib/actions');
@@ -268,7 +272,7 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (pathname === '/api/health') {
-      return sendJson(res, 200, { ok: true, scanning: state.scanning });
+      return sendJson(res, 200, { ok: true, scanning: state.scanning, boot: BOOT_ID, version: APP_VERSION });
     }
 
     if (pathname === '/api/diagnostics') {
