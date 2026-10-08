@@ -3,12 +3,9 @@ data/
 *.log
 .DS_Store
 
-# Native build outputs — regenerate with native/build.sh
+# Native build artifacts
 native/Vantage.app/
 native/make-icon
 native/.make-icon
-native/.icon-1024.png
 native/.AppIcon.iconset/
-
-# Generated audit reports
-reports/
+native/.icon-1024.png

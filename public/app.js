@@ -7356,8 +7356,10 @@ els.view.addEventListener('click', (event) => {
     withButtonState(secTest, async () => {
       try {
         const grant = await obtainGrant();
+        await refreshSettingsState();
         toast(grant ? 'Touch ID verified, assertions work' : 'Touch ID was not verified', grant ? 'good' : 'error');
       } catch (error) {
+        await refreshSettingsState();
         toast(`Touch ID test failed: ${error.message}`, 'error');
         throw error;
       }
