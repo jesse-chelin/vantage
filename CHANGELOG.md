@@ -22,6 +22,10 @@ This file is generated from the git history. Refresh it with `npm run changelog`
 - Shared updater, Beta labeling, and em-dash cleanup ([fab8796](https://github.com/jesse-chelin/vantage/commit/fab8796))
 - Rebrand: drop AI-dashboard naming (Vantage, local.vantage service) ([a5e8ed7](https://github.com/jesse-chelin/vantage/commit/a5e8ed7))
 
+### Fixed
+
+- Fix updating overlay hanging with no feedback or escape ([b7b60d3](https://github.com/jesse-chelin/vantage/commit/b7b60d3))
+
 ### Removed
 
 - README: remove em-dashes ([89cc9f1](https://github.com/jesse-chelin/vantage/commit/89cc9f1))
