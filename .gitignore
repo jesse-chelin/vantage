@@ -9,3 +9,6 @@ native/make-icon
 native/.make-icon
 native/.icon-1024.png
 native/.AppIcon.iconset/
+
+# Generated audit reports
+reports/
