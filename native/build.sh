@@ -8,7 +8,7 @@ echo "Building $APP …"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-xcrun swiftc -O -o "$APP/Contents/MacOS/Vantage" "$DIR/AIDashboard.swift" -framework Cocoa -framework WebKit -framework UserNotifications -framework IOKit -framework CoreGraphics
+xcrun swiftc -O -o "$APP/Contents/MacOS/Vantage" "$DIR/Vantage.swift" -framework Cocoa -framework WebKit -framework UserNotifications -framework IOKit -framework CoreGraphics
 
 # App icon: prefer a checked-in source PNG; else render the procedural default.
 if [ -f "$DIR/AppIcon.png" ]; then

@@ -12,38 +12,38 @@ strings).
 One command, then run again any time to update:
 
 ```sh
-git clone <your-repo-url> ~/Projects/ai-dashboard && ~/Projects/ai-dashboard/install.sh
+git clone <your-repo-url> ~/Projects/vantage && ~/Projects/vantage/install.sh
 ```
 
 `install.sh` checks Node (20+), pulls the latest code, starts the server as a
-login service (`local.ai-dashboard`), builds the native app when Xcode tools are
+login service (`local.vantage`), builds the native app when Xcode tools are
 present, and opens the dashboard. Options: `--native`, `--no-native`, `--uninstall`.
 Override the location with `VANTAGE_DIR` or the port with `PORT`.
 
 Update later with the same script (it fast-forwards your checkout) or:
 
 ```sh
-~/Projects/ai-dashboard/update.sh
+~/Projects/vantage/update.sh
 ```
 
 If you paste the repo onto GitHub as public, curl works too:
 
 ```sh
-VANTAGE_REPO=https://github.com/<you>/ai-dashboard.git sh -c "$(curl -fsSL https://raw.githubusercontent.com/<you>/ai-dashboard/main/install.sh)"
+VANTAGE_REPO=https://github.com/<you>/vantage.git sh -c "$(curl -fsSL https://raw.githubusercontent.com/<you>/vantage/main/install.sh)"
 ```
 
 ## Quick start
 
 ```sh
-cd ~/Projects/ai-dashboard
+cd ~/Projects/vantage
 npm start            # → http://127.0.0.1:8790
 ```
 
-It runs at login via the launchd agent `local.ai-dashboard`.
+It runs at login via the launchd agent `local.vantage`.
 
 ```sh
-launchctl kickstart -k gui/$(id -u)/local.ai-dashboard   # restart
-launchctl bootout gui/$(id -u)/local.ai-dashboard        # remove
+launchctl kickstart -k gui/$(id -u)/local.vantage   # restart
+launchctl bootout gui/$(id -u)/local.vantage        # remove
 ```
 
 Terminal scan: `npm run scan` (or `node bin/scan.js --json`).

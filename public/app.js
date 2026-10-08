@@ -87,7 +87,7 @@ function navigate(update) {
 
 // --- preferences -----------------------------------------------------------
 
-const PREFS_KEY = 'ai-dashboard.prefs';
+const PREFS_KEY = 'vantage.prefs';
 const ACCENTS = {
   indigo: ['#5e6ad2', '#8b93e8'],
   blue: ['#0a84ff', '#5ac8fa'],
@@ -6569,7 +6569,7 @@ window.addEventListener('beforeinstallprompt', (event) => {
 
 window.addEventListener('appinstalled', () => {
   installPrompt = null;
-  try { localStorage.setItem('ai-dashboard.pwa-installed', '1'); } catch { /* ignore */ }
+  try { localStorage.setItem('vantage.pwa-installed', '1'); } catch { /* ignore */ }
   api('/api/installed', { method: 'POST', body: {} }).catch(() => {});
   toast('Vantage installed', 'good');
   if (els.onboardingRoot && els.onboardingRoot.classList.contains('open')) renderOnboarding('none');
@@ -7042,9 +7042,9 @@ function settingsAdvanced() {
   const port = location.port || '8790';
   return `${settingsGroup('Behaviour', settingsRows('advanced'))}
     ${settingsGroup('Server',
-      sInfoRow('restart', 'Restart server', 'Reloads the launchd service local.ai-dashboard, the dashboard reconnects in a moment.', '<button class="btn small" data-act="system.restartService">Restart</button>') +
+      sInfoRow('restart', 'Restart server', 'Reloads the launchd service local.vantage, the dashboard reconnects in a moment.', '<button class="btn small" data-act="system.restartService">Restart</button>') +
       sInfoRow('pulse', 'Diagnostics', 'Recent server diagnostics and cache stats.', '<button class="btn small" data-settings-diagnostics>Open</button>') +
-      sInfoRow('terminal', 'Restart command', 'Copy the launchctl command instead.', '<button class="btn small" data-copy="launchctl kickstart -k gui/$(id -u)/local.ai-dashboard">Copy</button>')
+      sInfoRow('terminal', 'Restart command', 'Copy the launchctl command instead.', '<button class="btn small" data-copy="launchctl kickstart -k gui/$(id -u)/local.vantage">Copy</button>')
     )}
     <p class="settings-note">Bound to <span class="mono">${esc(location.hostname || '127.0.0.1')}:${esc(port)}</span>${settingsState.data.meta.readOnly ? ' · read-only mode' : ''}.</p>`;
 }

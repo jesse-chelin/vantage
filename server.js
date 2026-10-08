@@ -897,7 +897,7 @@ server.listen(PORT, HOST, async () => {
       .catch(() => {});
   }, 60_000).unref();
 
-  console.log(`AI dashboard running at http://${HOST}:${PORT}${READ_ONLY ? ' (read-only)' : ''}`);
+  console.log(`Vantage running at http://${HOST}:${PORT}${READ_ONLY ? ' (read-only)' : ''}`);
   if (state.generatedAt) console.log(`Loaded cached inventory from ${state.generatedAt}`);
   if (!state.data || cacheIsStale()) {
     console.log('Cache missing or stale, starting initial scan…');

@@ -2,9 +2,9 @@
 # Vantage installer and updater.
 #
 # Fresh install (from your repo):
-#   git clone <your-repo-url> ~/Projects/ai-dashboard && ~/Projects/ai-dashboard/install.sh
+#   git clone <your-repo-url> ~/Projects/vantage && ~/Projects/vantage/install.sh
 # Public repo, truly one line:
-#   curl -fsSL https://raw.githubusercontent.com/<you>/ai-dashboard/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/<you>/vantage/main/install.sh | sh
 #
 # Re-run the same command to update. Flags:
 #   --native      also build the native Mac app (default: build if Xcode tools exist)
@@ -15,9 +15,9 @@
 
 set -e
 
-LABEL="local.ai-dashboard"
+LABEL="local.vantage"
 PORT="${PORT:-8790}"
-DEFAULT_DIR="$HOME/Projects/ai-dashboard"
+DEFAULT_DIR="$HOME/Projects/vantage"
 REPO_URL="${VANTAGE_REPO:-}"
 
 say() { printf '%s\n' "$1"; }
@@ -49,7 +49,7 @@ if [ ! -f "$DIR/server.js" ]; then
   command -v git >/dev/null 2>&1 || { say "git is required."; exit 1; }
   if [ -z "$REPO_URL" ]; then
     say "No local checkout found. Set VANTAGE_REPO to clone automatically, e.g.:"
-    say "  VANTAGE_REPO=git@github.com:you/ai-dashboard.git sh install.sh"
+    say "  VANTAGE_REPO=git@github.com:you/vantage.git sh install.sh"
     exit 1
   fi
   say "Cloning $REPO_URL"
@@ -92,8 +92,8 @@ cat > "$PLIST" <<PLIST_EOF
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>5</integer>
-  <key>StandardOutPath</key><string>/tmp/ai-dashboard.log</string>
-  <key>StandardErrorPath</key><string>/tmp/ai-dashboard.err</string>
+  <key>StandardOutPath</key><string>/tmp/vantage.log</string>
+  <key>StandardErrorPath</key><string>/tmp/vantage.err</string>
 </dict>
 </plist>
 PLIST_EOF
@@ -117,7 +117,7 @@ sleep 1
 say ""
 say "Vantage is running:  http://localhost:$PORT"
 say "Login service:       $LABEL"
-say "Logs:                /tmp/ai-dashboard.log"
+say "Logs:                /tmp/vantage.log"
 say "Update:              $DIR/install.sh"
 say "Uninstall:           $DIR/install.sh --uninstall"
 open "http://localhost:$PORT" 2>/dev/null || true
