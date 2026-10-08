@@ -55,6 +55,7 @@ const push = require('./lib/push');
 const settings = require('./lib/settings');
 const onboarding = require('./lib/onboarding');
 const setup = require('./lib/setup');
+const update = require('./lib/update');
 
 diag.install();
 
@@ -733,6 +734,16 @@ const server = http.createServer(async (req, res) => {
       await fs.writeFile(target, bytes);
       const detail = await files.detail(target).catch(() => ({}));
       return sendJson(res, 200, { ok: true, path: target, name: safeName, size: bytes.length, detail });
+    }
+
+    if (pathname === '/api/update') {
+      return sendJson(res, 200, await update.status());
+    }
+
+    if (pathname === '/api/update/apply' && req.method === 'POST') {
+      if (READ_ONLY) return sendJson(res, 403, { error: 'Dashboard is in read-only mode' });
+      if (!authorized(req)) return sendJson(res, 403, { error: 'Forbidden' });
+      return sendJson(res, 200, await update.apply());
     }
 
     if (pathname === '/api/setup') {

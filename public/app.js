@@ -15,6 +15,7 @@ const els = {
   refresh: document.getElementById('refresh'),
   filter: document.getElementById('filter'),
   modeBadge: document.getElementById('mode-badge'),
+  updateChip: document.getElementById('update-chip'),
   modalRoot: document.getElementById('modal-root'),
   toastRoot: document.getElementById('toast-root'),
   jobDock: document.getElementById('job-dock'),
@@ -37,6 +38,7 @@ const state = {
   view: location.hash.replace(/^#/, '') || 'overview',
   filter: '',
   jobs: new Map(),
+  update: { checked: false, supported: true, available: false },
 };
 
 // --- motion + progress -----------------------------------------------------
@@ -5946,6 +5948,12 @@ els.refresh.addEventListener('click', () => {
   }
 });
 
+if (els.updateChip) {
+  els.updateChip.addEventListener('click', (event) => {
+    if (event.target.closest('[data-update-apply]')) applyUpdate();
+  });
+}
+
 els.filter.addEventListener('input', () => {
   state.filter = els.filter.value;
   applyFilter();
@@ -6762,6 +6770,8 @@ async function initCapabilities() {
   initDragDrop();
   syncWakeLock();
   syncBadge();
+  checkForUpdate();
+  setInterval(() => { if (!document.hidden) checkForUpdate(); }, 6 * 60 * 60 * 1000);
 }
 
 els.modalRoot.addEventListener('click', (event) => {
@@ -6876,6 +6886,64 @@ function setTestStatus(button, text, ok) {
   if (!el) return;
   el.textContent = text || '';
   el.className = `settings-test-status ${ok === true ? 'ok' : ok === false ? 'bad' : ''}`;
+}
+
+async function checkForUpdate(manual = false) {
+  try {
+    const data = await api('/api/update');
+    const wasAvailable = state.update && state.update.available;
+    state.update = { ...data, checked: true };
+    renderUpdateChip();
+    if (state.view === 'settings' && settingsState.section === 'about') renderSettingsSection();
+    if (manual) {
+      if (!data.supported) toast('This install is not a git checkout, so it cannot self-update.', '');
+      else if (data.available) toast(`Update available: ${data.behind} commit${data.behind === 1 ? '' : 's'} behind.`, '');
+      else toast('Vantage is up to date.', 'good');
+    } else if (data.available && !wasAvailable) {
+      toast(`A Vantage update is available (${data.behind} commit${data.behind === 1 ? '' : 's'}).`, '');
+    }
+  } catch (error) {
+    if (manual) toast(`Update check failed: ${error.message}`, 'error');
+  }
+}
+
+function renderUpdateChip() {
+  if (!els.updateChip) return;
+  const u = state.update || {};
+  if (!u.available) { els.updateChip.innerHTML = ''; return; }
+  els.updateChip.innerHTML = `<button class="update-chip" data-update-apply title="Update available: ${esc(u.subject || '')}">${svg('download')}<span>Update</span></button>`;
+}
+
+async function waitForServer(timeoutMs = 60_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch('/api/health', { cache: 'no-store' });
+      if (response.ok) return true;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  return false;
+}
+
+async function applyUpdate() {
+  const u = state.update || {};
+  const ok = await confirmSheet({
+    label: 'Update Vantage',
+    description: `Pull ${u.behind || 'the latest'} new commit${u.behind === 1 ? '' : 's'} and restart the server. The dashboard reconnects in a few seconds.`,
+    danger: 'medium',
+  }, {}, null);
+  if (!ok) return;
+  try {
+    toast('Updating Vantage…', '');
+    await api('/api/update/apply', { method: 'POST', body: {} });
+  } catch (error) {
+    toast(`Update failed: ${error.message}`, 'error');
+    return;
+  }
+  const back = await waitForServer();
+  if (!back) { toast('Vantage is restarting. Reload the page in a moment.', ''); return; }
+  location.reload();
 }
 
 async function openDiagnostics() {
@@ -7050,13 +7118,25 @@ function settingsAdvanced() {
 }
 
 function settingsAbout() {
+  const u = state.update || {};
+  let statusControl;
+  if (!u.supported) statusControl = pill('source install', 'warn');
+  else if (!u.checked) statusControl = '<button class="btn small" data-settings-check>Check for updates</button>';
+  else if (u.available) statusControl = `${pill(`${u.behind} behind`, 'warn')}<button class="btn small primary" data-settings-update>Update now</button>`;
+  else statusControl = `${pill('up to date', 'good')}<button class="btn small" data-settings-check>Check</button>`;
+  const updateSub = u.available
+    ? `New commits available: ${u.subject || 'update ready'}.`
+    : (u.error ? `Last check failed: ${u.error}` : 'Vantage keeps itself current from its git checkout.');
   return `${settingsGroup('Vantage',
-    sInfoRow('sparkle', 'Version', 'Total management for your Mac.', '<span class="mono">1.0</span>') +
+    sInfoRow('sparkle', 'Version', u.current ? `Total management for your Mac. Built from ${u.current}.` : 'Total management for your Mac.', '<span class="mono">1.0</span>') +
     sInfoRow('app', 'License', 'Open source under the MIT license.', '<span class="mono">MIT</span>') +
     sInfoRow('bolt', 'Setup', 'Re-run the onboarding wizard.', '<button class="btn small" data-settings-rerun>Run setup</button>')
   )}
+  ${settingsGroup('Updates',
+    sInfoRow('download', 'Vantage updates', updateSub, statusControl)
+  )}
   ${settingsGroup('Links',
-    sInfoRow('link', 'Repository', 'mo-browser-apps/icons', '<button class="btn small" data-settings-repo>Open</button>') +
+    sInfoRow('link', 'Repository', 'jesse-chelin/vantage', '<button class="btn small" data-settings-repo>Open</button>') +
     sInfoRow('download', 'Releases', 'Download the signed native app.', '<button class="btn small" data-settings-releases>Open</button>')
   )}
   <p class="settings-note">Settings are stored locally under <span class="mono">data/</span> on this Mac.</p>`;
@@ -7367,7 +7447,9 @@ els.view.addEventListener('click', (event) => {
     return;
   }
   if (event.target.closest('[data-settings-diagnostics]')) { openDiagnostics(); return; }
-  if (event.target.closest('[data-settings-releases]')) { window.open('https://github.com/mo-browser-apps/icons/releases'); return; }
+  if (event.target.closest('[data-settings-releases]')) { window.open('https://github.com/jesse-chelin/vantage/releases'); return; }
+  if (event.target.closest('[data-settings-check]')) { checkForUpdate(true); return; }
+  if (event.target.closest('[data-settings-update]')) { applyUpdate(); return; }
   if (event.target.closest('[data-settings-export]')) return exportSettings();
   if (event.target.closest('[data-settings-import]')) return importSettings();
   const reset = event.target.closest('[data-settings-reset]');
@@ -7379,7 +7461,7 @@ els.view.addEventListener('click', (event) => {
     return;
   }
   if (event.target.closest('[data-settings-repo]')) {
-    window.open('https://github.com/mo-browser-apps/icons');
+    window.open('https://github.com/jesse-chelin/vantage');
     return;
   }
   const copy = event.target.closest('[data-copy]');
