@@ -400,10 +400,10 @@ const VIEWS = [
   { id: 'store', label: 'Store', icon: 'shop', title: 'Homebrew Store' },
   { id: 'maintenance', label: 'Maintenance', icon: 'gear', title: 'Maintenance' },
   { id: 'ollama', label: 'Models', icon: 'brain', title: 'Ollama Models', count: (d) => d.summary?.counts?.ollamaModels },
-  { id: 'comfy', label: 'Image Gen', icon: 'photo', title: 'ComfyUI', count: (d) => d.summary?.counts?.comfyCheckpoints },
+  { id: 'comfy', label: 'Image Gen', icon: 'photo', title: 'ComfyUI', count: (d) => d.summary?.counts?.comfyCheckpoints, available: (d) => Boolean(d.comfyui && d.comfyui.installed) },
   { id: 'runtimes', label: 'Runtimes', icon: 'cube', title: 'ML Runtimes' },
-  { id: 'agent', label: 'Agent Stack', icon: 'bot', title: 'Agent Stack' },
-  { id: 'activity', label: 'Activity', icon: 'history', title: 'Agent Activity' },
+  { id: 'agent', label: 'Agent Stack', icon: 'bot', title: 'Agent Stack', available: (d) => Boolean(d.agentStack && !d.agentStack.error && d.agentStack.openclaw) },
+  { id: 'activity', label: 'Activity', icon: 'history', title: 'Agent Activity', available: (d) => Boolean(d.agentStack && !d.agentStack.error && d.agentStack.openclaw) },
   { id: 'ainews', label: 'AI News', icon: 'sparkle', title: 'AI News' },
   { id: 'history', label: 'History', icon: 'history', title: 'Action History' },
   { id: 'settings', label: 'Settings', icon: 'gears', title: 'Settings' },
@@ -868,7 +868,7 @@ function viewComfy(data) {
       body: 'ComfyUI is a node-based interface for Stable Diffusion. Point it at a model folder and your checkpoints appear here with sizes and usage.',
       docs: 'https://github.com/comfyanonymous/ComfyUI',
       command: 'git clone https://github.com/comfyanonymous/ComfyUI.git ~/ComfyUI',
-      steps: ['Clone ComfyUI into <span class="mono">~/ComfyUI</span>', 'Add checkpoints to <span class="mono">~/ComfyUI/models/checkpoints</span>', 'Run the <span class="mono">ai.openclaw.comfyui</span> service (or <span class="mono">python main.py</span>)'],
+      steps: ['Clone ComfyUI into <span class="mono">~/ComfyUI</span>', 'Add checkpoints to <span class="mono">~/ComfyUI/models/checkpoints</span>', 'Start it with <span class="mono">python main.py</span> (or your own launch agent)'],
       action: `<button class="btn small" data-scan>${svg('restart')} Rescan</button>`,
     });
   }
@@ -4156,21 +4156,28 @@ function renderNav() {
       <span class="nav-pin${pinned ? ' on' : ''}" data-pin="${v.id}" title="${pinned ? 'Unpin' : 'Pin to top'}" aria-label="${pinned ? 'Unpin' : 'Pin'} ${esc(v.label)}">${svg('star')}</span>
     </button>`;
   };
+  const isAvailable = (v) => {
+    if (!v || !v.available) return true;
+    try { return Boolean(v.available(data)); } catch { return true; }
+  };
   const sections = NAV_SECTIONS.map((section) => {
     const items = section.ids
       .map((id) => VIEWS.find((v) => v.id === id))
       .filter(Boolean)
+      .filter(isAvailable)
       .map(navItem)
       .join('');
+    if (!items) return '';
     return `<div class="nav-section"><div class="nav-section-label">${esc(section.label)}</div>${items}</div>`;
-  });
+  }).filter(Boolean);
   if (pins.length) {
     const pinnedItems = pins
       .map((id) => VIEWS.find((v) => v.id === id))
       .filter(Boolean)
+      .filter(isAvailable)
       .map(navItem)
       .join('');
-    sections.unshift(`<div class="nav-section"><div class="nav-section-label">Pinned</div>${pinnedItems}</div>`);
+    if (pinnedItems) sections.unshift(`<div class="nav-section"><div class="nav-section-label">Pinned</div>${pinnedItems}</div>`);
   }
   els.nav.innerHTML = sections.join('') + `<div class="nav-section nav-section-foot"><button class="nav-item${state.view === 'settings' ? ' active' : ''}" data-view="settings" title="Settings (⌘,)"><span class="ico">${svg('gears')}</span><span class="nav-label">Settings</span></button></div>`;
 }
@@ -4207,6 +4214,12 @@ function renderView() {
   }
   const view = VIEWS.find((v) => v.id === state.view) || VIEWS[0];
   const data = simulateData(state.data);
+  if (data && view.available && !view.available(data)) {
+    state.view = 'overview';
+    if (location.hash.replace(/^#/, '') !== 'overview') location.hash = 'overview';
+    renderNav();
+    return renderView();
+  }
   resetRowCursor();
   els.viewTitle.textContent = view.title;
   els.viewSub.textContent = view.id === 'monitor'
@@ -4267,7 +4280,10 @@ function renderView() {
 }
 
 function setView(id) {
-  if (!VIEWS.some((v) => v.id === id)) return;
+  const target = VIEWS.find((v) => v.id === id);
+  if (!target) return;
+  const data = simulateData(state.data);
+  if (data && target.available && !target.available(data)) id = 'overview';
   closePanel();
   state.view = id;
   if (location.hash.replace(/^#/, '') !== id) location.hash = id;
