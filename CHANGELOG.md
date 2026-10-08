@@ -3,6 +3,12 @@
 All notable changes to Vantage are documented here.
 This file is generated from the git history. Refresh it with `npm run changelog`.
 
+## Unreleased (2026-10-09)
+
+### Fixed
+
+- Fix dashboard not reflecting removed OpenClaw and ComfyUI ([9b323b2](https://github.com/jesse-chelin/vantage/commit/9b323b2))
+
 ## v0.9.0-beta (2026-10-09)
 
 ### Added
