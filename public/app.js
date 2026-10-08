@@ -5964,6 +5964,7 @@ if (els.footVersion) {
 
 els.modalRoot.addEventListener('click', (event) => {
   if (event.target.closest('[data-update-dismiss]')) closeUpdateOverlay();
+  if (event.target.closest('[data-update-reload]')) location.reload();
 });
 
 els.filter.addEventListener('input', () => {
@@ -7001,7 +7002,7 @@ function showUpdateError(message) {
   const note = els.modalRoot && els.modalRoot.querySelector('[data-update-note]');
   if (note) {
     note.hidden = false;
-    note.innerHTML = `${esc(message)} <button class="btn small" type="button" data-update-dismiss>Close</button>`;
+    note.innerHTML = `${esc(message)} <span class="update-error-actions"><button class="btn small primary" type="button" data-update-reload>Reload</button><button class="btn small" type="button" data-update-dismiss>Close</button></span>`;
   }
 }
 
@@ -7013,7 +7014,7 @@ function closeUpdateOverlay() {
 }
 
 // Waits until the server reports a new boot id, which means the update restarted it.
-async function waitForRestart(previousBoot, timeoutMs = 90_000) {
+async function waitForRestart(previousBoot, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -7070,9 +7071,15 @@ async function applyUpdate() {
   setUpdateStep('restart', 'active');
   setUpdateTitle('Restarting Vantage', 'Bringing the new version back online.');
 
-  const health = await waitForRestart(previousBoot);
+  const slowTimer = setTimeout(() => {
+    setUpdateTitle('Still restarting…', 'The server is taking longer than usual to come back.');
+  }, 8000);
+
+  const health = await waitForRestart(previousBoot, 30_000);
+  clearTimeout(slowTimer);
   if (!health) {
-    showUpdateError('Vantage is still restarting. Reload the page in a moment.');
+    setUpdateStep('restart', 'failed');
+    showUpdateError('Could not confirm the restart. Reload the page to continue.');
     return;
   }
   state.boot = health.boot || null;
