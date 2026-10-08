@@ -2,9 +2,9 @@
 # Vantage installer and updater.
 #
 # Fresh install (from your repo):
-#   git clone <your-repo-url> ~/Projects/vantage && ~/Projects/vantage/install.sh
+#   git clone git@github.com:jesse-chelin/vantage.git ~/Projects/vantage && ~/Projects/vantage/install.sh
 # Public repo, truly one line:
-#   curl -fsSL https://raw.githubusercontent.com/<you>/vantage/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/jesse-chelin/vantage/main/install.sh | sh
 #
 # Re-run the same command to update. Flags:
 #   --native      also build the native Mac app (default: build if Xcode tools exist)
@@ -49,7 +49,7 @@ if [ ! -f "$DIR/server.js" ]; then
   command -v git >/dev/null 2>&1 || { say "git is required."; exit 1; }
   if [ -z "$REPO_URL" ]; then
     say "No local checkout found. Set VANTAGE_REPO to clone automatically, e.g.:"
-    say "  VANTAGE_REPO=git@github.com:you/vantage.git sh install.sh"
+    say "  VANTAGE_REPO=git@github.com:jesse-chelin/vantage.git sh install.sh"
     exit 1
   fi
   say "Cloning $REPO_URL"

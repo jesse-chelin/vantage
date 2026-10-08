@@ -44,7 +44,7 @@ diagnostics), **Security** (exposure, posture, tunnels), **Applications**,
 One command on any Mac (macOS 13+, Node 20+):
 
 ```sh
-git clone <your-repo-url> ~/Projects/vantage && ~/Projects/vantage/install.sh
+git clone git@github.com:jesse-chelin/vantage.git ~/Projects/vantage && ~/Projects/vantage/install.sh
 ```
 
 `install.sh` checks Node, pulls the code, starts Vantage as a **login service**
