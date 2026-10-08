@@ -737,7 +737,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/update') {
-      return sendJson(res, 200, await update.status());
+      const status = await update.status();
+      notify.checkUpdate(status).catch(() => {});
+      return sendJson(res, 200, status);
     }
 
     if (pathname === '/api/update/apply' && req.method === 'POST') {
