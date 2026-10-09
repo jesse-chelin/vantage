@@ -11,6 +11,7 @@ This file is generated from the git history. Refresh it with `npm run changelog`
 
 ### Other
 
+- Refresh Monitor top processes every 2s via a dedicated endpoint ([6701a07](https://github.com/jesse-chelin/vantage/commit/6701a07))
 - Make Quit process reliable with SIGKILL escalation and clearer confirm ([386e046](https://github.com/jesse-chelin/vantage/commit/386e046))
 - Extend stat widgets across Monitor, Disk, Network, Services, Runtimes, Ollama, Brew and Security ([608ff9c](https://github.com/jesse-chelin/vantage/commit/608ff9c))
 - Redesign overview stat tiles with charts and richer detail ([f7fd613](https://github.com/jesse-chelin/vantage/commit/f7fd613))
