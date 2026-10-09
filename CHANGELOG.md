@@ -9,6 +9,10 @@ This file is generated from the git history. Refresh it with `npm run changelog`
 
 - Fix dashboard not reflecting removed OpenClaw and ComfyUI ([9b323b2](https://github.com/jesse-chelin/vantage/commit/9b323b2))
 
+### Other
+
+- Onboarding redesign, native macOS assets, and reset tooling ([17ba917](https://github.com/jesse-chelin/vantage/commit/17ba917))
+
 ## v0.9.0-beta (2026-10-09)
 
 ### Added
