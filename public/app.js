@@ -265,15 +265,20 @@ function row({ title, sub, size, actions, search, attrs, clickable, icon, badge 
 
 function statTile(s) {
   const value = String(s.value);
+  const tone = s.tone ? ` tone-${s.tone}` : '';
+  const sparkValues = Array.isArray(s.spark) ? s.spark.filter((v) => Number.isFinite(v)) : [];
+  const viz = sparkValues.length > 1
+    ? `<span class="stat-spark">${areaChart(s.spark, { height: 34, width: 260, color: s.sparkColor || 'var(--accent)' })}</span>`
+    : (s.viz ? `<span class="stat-viz">${s.viz}</span>` : '');
   return `<div class="card stat">
     <div class="stat-head">
       <span class="stat-ico">${svg(s.icon)}</span>
       <span class="stat-label">${esc(s.label)}</span>
       ${s.badge ? `<span class="stat-badge">${s.badge}</span>` : ''}
     </div>
-    <span class="value${value.length > 8 ? ' small' : ''}">${esc(s.value)}</span>
+    <span class="value${value.length > 8 ? ' small' : ''}${tone}">${esc(s.value)}</span>
     ${s.hint ? `<span class="hint">${esc(s.hint)}</span>` : ''}
-    ${s.viz ? `<span class="stat-viz">${s.viz}</span>` : ''}
+    ${viz}
   </div>`;
 }
 
@@ -845,7 +850,23 @@ function viewStorage(data) {
   ].filter(Boolean);
   const miscRows = misc.map((m) => row({ title: esc(m.name), size: fmtBytes(m.bytes) })).join('');
 
+  const disk = data.system?.disk || {};
+  const cachesBytes = data.summary?.cachesBytes || (storage.caches || []).reduce((sum, c) => sum + (c.bytes || 0), 0);
+  const downloadsBytes = (storage.downloads || []).reduce((sum, f) => sum + (f.bytes || 0), 0);
+  const storageWidgets = [
+    disk.totalBytes ? {
+      icon: 'disk', label: 'Disk usage', value: fmtBytes(disk.usedBytes),
+      hint: `${fmtBytes(disk.freeBytes)} free of ${fmtBytes(disk.totalBytes)}`,
+      viz: statMeter(disk.usedPercent, disk.usedPercent > 90 ? 'var(--red)' : disk.usedPercent > 75 ? 'var(--orange)' : 'var(--green)'),
+    } : null,
+    { icon: 'layers', label: 'Caches', value: fmtBytes(cachesBytes), hint: `${(storage.caches || []).length} locations` },
+    storage.trashBytes ? { icon: 'trash', label: 'Trash', value: fmtBytes(storage.trashBytes), hint: 'emptied from the Clean up panel' } : null,
+    { icon: 'download', label: 'Downloads', value: fmtBytes(downloadsBytes), hint: `${(storage.downloads || []).length} items` },
+    storage.hfBytes ? { icon: 'brain', label: 'HuggingFace cache', value: fmtBytes(storage.hfBytes), hint: 'model downloads' } : null,
+  ].filter(Boolean).map(statTile).join('');
+
   return [
+    storageWidgets ? `<div class="grid stats">${storageWidgets}</div>` : '',
     diskRoot,
     group('Home directory', 'largest items first', card(`<div class="rows">${homeRowsFixed || '<div class="empty-note">No data</div>'}</div>`)),
     group('Caches', null, card(`<div class="rows">${cacheRows || '<div class="empty-note">No caches found</div>'}</div>`)),
@@ -941,8 +962,18 @@ function viewOllama(data) {
     <dt>Disk usage</dt><dd>${fmtBytes(ollama.dirBytes)}</dd>
   </dl>`);
 
+  const loadedBytes = (ollama.loaded || []).reduce((sum, m) => sum + (m.sizeVram || 0), 0);
+  const modelSizes = (ollama.models || []).map((m) => m.sizeBytes || 0).sort((a, b) => b - a).slice(0, 7);
+  const biggest = (ollama.models || []).slice().sort((a, b) => (b.sizeBytes || 0) - (a.sizeBytes || 0))[0];
+  const ollamaWidgets = [
+    { icon: 'brain', label: 'Installed models', value: fmtNum(ollama.modelCount), hint: `${fmtBytes(ollama.totalBytes)} on disk${ollama.tagCount && ollama.tagCount !== ollama.modelCount ? ` · ${fmtNum(ollama.tagCount)} tags` : ''}`, viz: statBars(modelSizes) },
+    { icon: 'layers', label: 'In memory', value: fmtBytes(loadedBytes), hint: `${(ollama.loaded || []).length} loaded`, tone: (ollama.loaded || []).length ? 'accent' : '' },
+    biggest ? { icon: 'cube', label: 'Largest model', value: fmtBytes(biggest.sizeBytes), hint: biggest.name } : null,
+  ].filter(Boolean).map(statTile).join('');
+
   return [
     header,
+    `<div class="grid stats">${ollamaWidgets}</div>`,
     group('Loaded in memory', `${ollama.loaded?.length || 0} of ${ollama.modelCount || 0}`, card(`<div class="rows">${loadedRows || '<div class="empty-note">No models currently loaded.</div>'}</div>`)),
     group('Installed models', modelHint, card(`<div class="rows">${modelRows || '<div class="empty-note">No models found.</div>'}</div>`)),
     `<div id="model-extras">${skeletonRows(3)}</div>`,
@@ -1033,7 +1064,13 @@ function viewRuntimes(data) {
       action: `<button class="btn small" data-scan>${svg('restart')} Rescan</button>`,
     });
   }
-  return `<div class="grid two">${runtimes
+  const totalModelFiles = runtimes.reduce((sum, rt) => sum + (rt.models || []).length, 0);
+  const totalModelBytes = runtimes.reduce((sum, rt) => sum + (rt.models || []).reduce((a, m) => a + (m.bytes || 0), 0), 0);
+  const runtimeWidgets = [
+    { icon: 'cube', label: 'Runtimes', value: fmtNum(runtimes.length), hint: runtimes.map((rt) => rt.name).join(', ') },
+    { icon: 'layers', label: 'Local model files', value: fmtNum(totalModelFiles), hint: fmtBytes(totalModelBytes) },
+  ].map(statTile).join('');
+  return `<div class="grid stats">${runtimeWidgets}</div><div class="grid two">${runtimes
     .map((rt) => {
       const models = (rt.models || [])
         .map((m) =>
@@ -1141,7 +1178,16 @@ function viewServices(data) {
 
   const agentRows = (services.launchAgents || []).map((a) => row({ title: esc(a.name), size: fmtBytes(a.bytes), sub: `modified ${esc(relativeTime(a.modifiedAt))}`, search: a.name, icon: `<span class="row-ico">${fileIconImg(a.name)}</span>` })).join('');
 
+  const runningCount = (services.services || []).filter((s) => s.running).length;
+  const stoppedCount = (services.services || []).length - runningCount;
+  const serviceWidgets = [
+    { icon: 'gears', label: 'Services running', value: fmtNum(runningCount), hint: `${stoppedCount} stopped · ${(services.services || []).length} total`, viz: statSegments([{ value: runningCount, color: 'var(--green)', label: 'Running' }, { value: stoppedCount, color: 'var(--orange)', label: 'Stopped' }]) },
+    { icon: 'network', label: 'Listening ports', value: fmtNum(ports.length), hint: 'loopback + LAN' },
+    { icon: 'layers', label: 'LaunchAgents', value: fmtNum((services.launchAgents || []).length), hint: 'user login items' },
+  ].map(statTile).join('');
+
   return [
+    `<div class="grid stats">${serviceWidgets}</div>`,
     `<div id="health-root">${skeletonRows(3)}</div>`,
     group('Launchd services', 'start, stop and restart your AI services', card(`<div class="rows">${svcRows || '<div class="empty-note">No user services</div>'}</div>`)),
     group('Listening ports', null, card(table([{ label: 'Port', num: true }, { label: 'Service' }, { label: 'Process' }, { label: 'Bind' }], portRows, 'None'))),
@@ -1179,9 +1225,9 @@ function viewBrew(data) {
   return [
     toolbar,
     `<div class="grid stats">
-      ${statTile({ icon: 'cube', value: fmtNum(brew.formulaCount ?? (brew.packages || []).length), label: 'Formulae', hint: `${fmtBytes(brew.cellarBytes)} installed` })}
-      ${statTile({ icon: 'download', value: fmtBytes(brew.cacheBytes), label: 'Download cache' })}
-      ${statTile({ icon: 'box', value: fmtNum(brew.casks?.length || 0), label: 'Casks', hint: (brew.casks || []).join(', ') || 'none' })}
+      ${statTile({ icon: 'cube', label: 'Formulae', value: fmtNum(brew.formulaCount ?? (brew.packages || []).length), hint: `${fmtBytes(brew.cellarBytes)} installed`, viz: statSegments([{ value: brew.formulaCount || (brew.packages || []).length, color: 'var(--accent)', label: 'Formulae' }, { value: (brew.casks || []).length, color: 'var(--text-3)', label: 'Casks' }]) })}
+      ${statTile({ icon: 'download', label: 'Download cache', value: fmtBytes(brew.cacheBytes), hint: 'safe to prune', viz: statMeter(((brew.cacheBytes || 0) / ((brew.cacheBytes || 0) + (brew.cellarBytes || 1))) * 100, 'var(--orange)') })}
+      ${statTile({ icon: 'box', label: 'Casks', value: fmtNum((brew.casks || []).length), hint: (brew.casks || []).slice(0, 3).join(', ') || 'none' })}
     </div>`,
     `<div id="brew-root">${skeletonRows(7)}</div>`,
     brew.services?.length ? group('brew services', null, card(table([{ label: 'Service' }, { label: 'Status' }], brewSvcRows))) : '',
@@ -2090,13 +2136,21 @@ function monitorBody(sample, samples) {
   const disk = sample.disk || {};
   const cpu = sample.cpu == null ? '–' : `${sample.cpu.toFixed(0)}%`;
 
+  const cpuTone = sample.cpu == null ? '' : sample.cpu > 85 ? 'bad' : sample.cpu > 60 ? 'warn' : '';
+  const memTone = usedPct > 90 ? 'bad' : usedPct > 75 ? 'warn' : '';
+  const cpuSeries = samples.map((s) => s.cpu || 0);
+  const memUsedSeries = samples.map((s) => s.memUsed || 0);
+  const memAvailSeries = samples.map((s) => s.memAvailable || 0);
+  const diskFreeSeries = samples.map((s) => s.diskFree || 0);
+  const ollamaSeries = samples.map((s) => s.ollamaBytes || 0);
+
   const tiles = [
-    { label: 'CPU', value: cpu, hint: `load avg ${(sample.load1 || 0).toFixed(2)}`, icon: 'cpu' },
-    { label: 'Memory used', value: fmtBytes(sample.mem.used), hint: `${usedPct.toFixed(0)}% of ${fmtBytes(total)}`, icon: 'memory' },
-    { label: 'Memory available', value: fmtBytes(sample.mem.available), hint: 'free + cached', icon: 'layers' },
-    { label: 'Swap used', value: fmtBytes(sample.swap.used), hint: `of ${fmtBytes(sample.swap.total)}`, icon: 'swap' },
-    { label: 'Disk free', value: fmtBytes(disk.free), hint: `${fmtBytes(disk.used)} used`, icon: 'disk' },
-    { label: 'Ollama in memory', value: fmtBytes(sample.ollama.bytes), hint: `${sample.ollama.models} model${sample.ollama.models === 1 ? '' : 's'}`, icon: 'brain' },
+    { label: 'CPU', value: cpu, hint: `load avg ${(sample.load1 || 0).toFixed(2)}`, icon: 'cpu', tone: cpuTone, spark: cpuSeries, sparkColor: '#5e6ad2' },
+    { label: 'Memory used', value: fmtBytes(sample.mem.used), hint: `${usedPct.toFixed(0)}% of ${fmtBytes(total)}`, icon: 'memory', tone: memTone, viz: statMeter(usedPct, usedPct > 90 ? 'var(--red)' : usedPct > 75 ? 'var(--orange)' : '#4cc2c4') },
+    { label: 'Memory available', value: fmtBytes(sample.mem.available), hint: 'free + cached', icon: 'layers', spark: memAvailSeries, sparkColor: '#4cb782' },
+    { label: 'Swap used', value: fmtBytes(sample.swap.used), hint: sample.swap.total ? `of ${fmtBytes(sample.swap.total)}` : 'not in use', icon: 'swap', viz: sample.swap.total ? statMeter((sample.swap.used / sample.swap.total) * 100, 'var(--orange)') : '' },
+    { label: 'Disk free', value: fmtBytes(disk.free), hint: `${fmtBytes(disk.used)} used`, icon: 'disk', spark: diskFreeSeries, sparkColor: '#f2a34a' },
+    { label: 'Ollama in memory', value: fmtBytes(sample.ollama.bytes), hint: `${sample.ollama.models} model${sample.ollama.models === 1 ? '' : 's'}`, icon: 'brain', spark: ollamaSeries, sparkColor: '#0a84ff' },
   ]
     .map(statTile)
     .join('');
@@ -2763,6 +2817,16 @@ function viewSecurity() {
 function securityBody(report) {
   const issues = report.issues || [];
   const warnCount = issues.filter((i) => i.severity === 'warn').length;
+  const postureList = report.posture || [];
+  const posturePassed = postureList.filter((p) => p.ok).length;
+  const exposedCount = (report.bindings || []).filter((b) => b.exposure !== 'loopback').length;
+  const secretCount = (report.secrets && report.secrets.present) ? report.secrets.present.length : 0;
+  const securityWidgets = [
+    { icon: 'shield', label: 'Findings', value: fmtNum(issues.length), hint: warnCount ? `${warnCount} need attention` : 'all clear', tone: warnCount ? 'warn' : 'good' },
+    { icon: 'check', label: 'Posture checks', value: `${posturePassed}/${postureList.length}`, hint: 'macOS hardening', viz: statMeter(postureList.length ? (posturePassed / postureList.length) * 100 : 0, 'var(--green)') },
+    { icon: 'network', label: 'Exposed ports', value: fmtNum(exposedCount), hint: exposedCount ? 'reachable off-device' : 'all loopback', tone: exposedCount ? 'warn' : 'good' },
+    { icon: 'key', label: 'Secrets set', value: fmtNum(secretCount), hint: `${(report.secrets && report.secrets.missing ? report.secrets.missing.length : 0)} missing` },
+  ].map(statTile).join('');
   const issueRows = issues
     .map((issue, i) =>
       row({
@@ -2812,6 +2876,7 @@ function securityBody(report) {
 
   return [
     `<div class="toolbar-row"><button class="btn small" data-security-refresh>${svg('restart')} Re-run audit</button></div>`,
+    `<div class="grid stats">${securityWidgets}</div>`,
     group('Attention', warnCount ? `${warnCount} warning${warnCount === 1 ? '' : 's'}` : 'no issues found', card(`<div class="rows">${issueRows || '<div class="empty-note">No issues detected</div>'}</div>`)),
     group('Network exposure', 'listening TCP sockets', card(table([{ label: 'Port', num: true }, { label: 'Service' }, { label: 'Process' }, { label: 'Exposure' }], bindingRows, 'None'))),
     group('macOS posture', null, card(`<div class="rows">${postureRows}</div>`)),
@@ -3551,15 +3616,6 @@ function networkLiveBody(data, series) {
   const net = data.net || {};
   const primary = (data.interfaces || []).find((i) => i.status === 'active') || (data.interfaces || [])[0] || {};
 
-  const tiles = [
-    { label: 'Download', value: net.rxRate != null ? `${fmtBytes(net.rxRate)}/s` : '–', hint: `${fmtBytes(net.rx)} total`, icon: 'download' },
-    { label: 'Upload', value: net.txRate != null ? `${fmtBytes(net.txRate)}/s` : '–', hint: `${fmtBytes(net.tx)} total`, icon: 'upload' },
-    { label: 'Active connections', value: String((data.connections || {}).total ?? 0), icon: 'network' },
-    { label: 'Link', value: primary.media ? primary.media.split('(')[0].trim() : '–', hint: primary.name ? `${primary.name}${primary.ipv4 ? ` · ${primary.ipv4}` : ''}` : '', icon: 'link' },
-  ]
-    .map(statTile)
-    .join('');
-
   const samples = (series && series.samples) || [];
   const rx = [];
   const tx = [];
@@ -3568,6 +3624,15 @@ function networkLiveBody(data, series) {
     rx.push(dt > 0 ? Math.max(0, (samples[i].netRx - samples[i - 1].netRx) / dt) : 0);
     tx.push(dt > 0 ? Math.max(0, (samples[i].netTx - samples[i - 1].netTx) / dt) : 0);
   }
+
+  const tiles = [
+    { label: 'Download', value: net.rxRate != null ? `${fmtBytes(net.rxRate)}/s` : '–', hint: `${fmtBytes(net.rx)} total`, icon: 'download', spark: rx, sparkColor: '#4cc2c4' },
+    { label: 'Upload', value: net.txRate != null ? `${fmtBytes(net.txRate)}/s` : '–', hint: `${fmtBytes(net.tx)} total`, icon: 'upload', spark: tx, sparkColor: '#5e6ad2' },
+    { label: 'Active connections', value: String((data.connections || {}).total ?? 0), hint: primary.ipv4 ? `${primary.ipv4} on ${primary.name}` : 'current', icon: 'network' },
+    { label: 'Link', value: primary.media ? primary.media.split('(')[0].trim() : '–', hint: primary.name ? `${primary.name}${primary.ipv4 ? ` · ${primary.ipv4}` : ''}` : '', icon: 'link' },
+  ]
+    .map(statTile)
+    .join('');
   const rateFormat = (v) => `${fmtBytes(v)}/s`;
   const rangeBar = `<div class="segmented">${MONITOR_RANGES.map((r) => `<button class="seg${r.minutes === netRange ? ' active' : ''}" data-net-range="${r.minutes}">${r.label}</button>`).join('')}</div>`;
   const charts = `<div class="grid two">

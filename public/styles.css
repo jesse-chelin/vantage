@@ -464,7 +464,13 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
 .stat .value { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
 .stat .value.small { font-size: 18px; }
 .stat .hint { margin-top: 3px; font-size: 11px; color: var(--text-3); }
+.stat .value.tone-good { color: var(--green); }
+.stat .value.tone-warn { color: var(--orange); }
+.stat .value.tone-bad { color: var(--red); }
+.stat .value.tone-accent { color: var(--accent-2); }
 .stat-viz { display: block; margin-top: auto; padding-top: 12px; }
+.stat-spark { display: block; margin-top: auto; padding-top: 10px; }
+.stat-spark .chart { height: 34px; }
 .stat-meter { display: block; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
 .stat-meter > span { display: block; height: 100%; border-radius: 999px; transition: width 0.4s ease; }
 .stat-seg { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--surface-3); gap: 2px; }
