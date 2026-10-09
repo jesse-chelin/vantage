@@ -1,5 +1,6 @@
 node_modules/
 data/
+data.bak.*/
 *.log
 .DS_Store
 
@@ -9,3 +10,6 @@ native/make-icon
 native/.make-icon
 native/.AppIcon.iconset/
 native/.icon-1024.png
+
+# SF Symbols renderer (built on demand by lib/symbols.js)
+bin/sfrender

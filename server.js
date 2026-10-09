@@ -48,6 +48,9 @@ const network = require('./lib/network');
 const brew = require('./lib/brew');
 const icons = require('./lib/icons');
 const device = require('./lib/device');
+const folders = require('./lib/folders');
+const fileicons = require('./lib/fileicons');
+const symbols = require('./lib/symbols');
 const maintenance = require('./lib/maintenance');
 const rules = require('./lib/rules');
 const schedule = require('./lib/schedule');
@@ -97,11 +100,13 @@ const TOKEN = loadOrCreateToken();
 
 const state = {
   scanning: false,
+  scanningDeep: null,
   progress: null,
   generatedAt: null,
   durationMs: null,
   error: null,
   data: null,
+  deepScan: null,
 };
 
 const MIME = {
@@ -152,26 +157,29 @@ async function saveCache() {
   }
 }
 
-function startScan() {
+function startScan(options = {}) {
   if (state.scanning) return false;
+  const deep = options.deep !== false;
   state.scanning = true;
+  state.scanningDeep = deep;
   state.progress = 'Starting scan';
   state.error = null;
 
   const startedAt = Date.now();
   scanAll((label) => {
     state.progress = label;
-  })
+  }, { deep })
     .then(async (data) => {
       state.data = data;
       state.generatedAt = data.generatedAt;
       state.durationMs = Date.now() - startedAt;
       state.error = null;
+      state.deepScan = deep;
       overview.clearCache();
       cache.clear();
       brew.clearCache();
       await saveCache();
-      console.log(`[scan] completed in ${(state.durationMs / 1000).toFixed(1)}s`);
+      console.log(`[scan] completed in ${(state.durationMs / 1000).toFixed(1)}s${deep ? '' : ' (quick, folder access pending setup)'}`);
     })
     .catch((error) => {
       state.error = error && error.stack ? error.stack : String(error);
@@ -180,6 +188,10 @@ function startScan() {
     .finally(() => {
       state.scanning = false;
       state.progress = null;
+      if (pendingDeepScan && !deep) {
+        pendingDeepScan = false;
+        startScan({ deep: true });
+      }
     });
 
   return true;
@@ -189,6 +201,30 @@ function cacheIsStale() {
   if (!state.generatedAt) return true;
   const age = Date.now() - new Date(state.generatedAt).getTime();
   return Number.isNaN(age) || age > CACHE_MAX_AGE_MS;
+}
+
+// The notification watcher can post real macOS banners (disk low, jobs, update),
+// which trigger a system permission prompt the first time. Keep it quiet until
+// onboarding has explained notifications; the wizard starts it when it finishes.
+let notifyWatcherStarted = false;
+function startNotifyWatcher() {
+  if (notifyWatcherStarted) return;
+  notifyWatcherStarted = true;
+  notify.startWatcher({ getSample: metrics.getLatest, listJobs, endpointChecks: health.endpointChecks });
+}
+
+// Called when the wizard reports completion: now it's safe to read the user's
+// home folders and turn on background banners.
+let pendingDeepScan = false;
+function afterOnboardingComplete() {
+  startNotifyWatcher();
+  const needsDeep = !state.data || state.deepScan === false || cacheIsStale();
+  if (!needsDeep) return;
+  if (state.scanning) {
+    if (state.scanningDeep === false) pendingDeepScan = true;
+  } else {
+    startScan({ deep: true });
+  }
 }
 
 function sendJson(res, status, body) {
@@ -254,16 +290,42 @@ async function serveStatic(res, urlPath) {
     const stat = await fs.stat(resolved);
     if (!stat.isFile()) throw new Error('not a file');
     const ext = path.extname(resolved).toLowerCase();
+
+    // Version the shell assets by their mtime so an updated app.js/styles.css is
+    // always fetched, no matter how aggressively the browser or service worker
+    // cached the previous copy.
+    if (relative === 'index.html') {
+      const token = await assetToken();
+      const html = (await fs.readFile(resolved, 'utf8'))
+        .replace('href="/styles.css"', `href="/styles.css?v=${token}"`)
+        .replace('src="/app.js"', `src="/app.js?v=${token}"`);
+      res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': Buffer.byteLength(html), 'Cache-Control': 'no-store' });
+      res.end(html);
+      return;
+    }
+
     res.writeHead(200, {
       ...SECURITY_HEADERS,
       'Content-Type': MIME[ext] || 'application/octet-stream',
       'Content-Length': stat.size,
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-store',
     });
     fssync.createReadStream(resolved).pipe(res);
   } catch {
     res.writeHead(404, { ...SECURITY_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Not found');
+  }
+}
+
+async function assetToken() {
+  try {
+    const [a, s] = await Promise.all([
+      fs.stat(path.join(PUBLIC_DIR, 'app.js')),
+      fs.stat(path.join(PUBLIC_DIR, 'styles.css')),
+    ]);
+    return `${(a.mtimeMs ^ s.mtimeMs).toString(36)}`;
+  } catch {
+    return BOOT_ID;
   }
 }
 
@@ -552,6 +614,59 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (pathname === '/api/symbols') {
+      try {
+        return sendJson(res, 200, { icons: Object.keys(await symbols.available()), version: await symbols.token(), masks: await symbols.masks() });
+      } catch (error) {
+        return sendJson(res, 200, { icons: [], version: '0', masks: {}, error: error.message });
+      }
+    }
+
+    if (pathname === '/api/symbol/icon') {
+      const id = url.searchParams.get('id') || '';
+      const size = Math.max(12, Math.min(256, Number(url.searchParams.get('size')) || 64));
+      try {
+        const file = await symbols.icon(id, size);
+        if (!file) return sendJson(res, 404, { error: 'No symbol' });
+        const stat = await fs.stat(file);
+        res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'image/png', 'Content-Length': stat.size, 'Cache-Control': 'no-store' });
+        fssync.createReadStream(file).pipe(res);
+      } catch (error) {
+        sendJson(res, error.status || 500, { error: error.message });
+      }
+      return;
+    }
+
+    if (pathname === '/api/folder/icon') {
+      const id = url.searchParams.get('id') || '';
+      const size = Math.max(16, Math.min(128, Number(url.searchParams.get('size')) || 64));
+      try {
+        const file = await folders.folderIcon(id, size);
+        if (!file) return sendJson(res, 404, { error: 'No folder icon' });
+        const stat = await fs.stat(file);
+        res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'image/png', 'Content-Length': stat.size, 'Cache-Control': 'public, max-age=86400' });
+        fssync.createReadStream(file).pipe(res);
+      } catch (error) {
+        sendJson(res, error.status || 500, { error: error.message });
+      }
+      return;
+    }
+
+    if (pathname === '/api/file/icon') {
+      const name = url.searchParams.get('name') || '';
+      const size = Math.max(16, Math.min(128, Number(url.searchParams.get('size')) || 48));
+      try {
+        const file = await fileicons.fileIcon(name, size);
+        if (!file) return sendJson(res, 404, { error: 'No file icon' });
+        const stat = await fs.stat(file);
+        res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'image/png', 'Content-Length': stat.size, 'Cache-Control': 'public, max-age=86400' });
+        fssync.createReadStream(file).pipe(res);
+      } catch (error) {
+        sendJson(res, error.status || 500, { error: error.message });
+      }
+      return;
+    }
+
     if (pathname === '/api/apps/icon') {
       const target = url.searchParams.get('path');
       if (!target) return sendJson(res, 400, { error: 'path is required' });
@@ -743,7 +858,9 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/update') {
       const status = await update.status();
-      notify.checkUpdate(status).catch(() => {});
+      // Don't fire an update banner (and its first-run macOS permission prompt)
+      // until setup is done.
+      if (notifyWatcherStarted) notify.checkUpdate(status).catch(() => {});
       return sendJson(res, 200, status);
     }
 
@@ -759,6 +876,17 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/setup') {
       return sendJson(res, 200, await setup.status());
+    }
+
+    if (pathname === '/api/setup/full-disk-access') {
+      return sendJson(res, 200, { fullDiskAccess: await setup.fullDiskAccess() });
+    }
+
+    if (pathname === '/api/setup/folder-access' && req.method === 'POST') {
+      if (READ_ONLY) return sendJson(res, 403, { error: 'Dashboard is in read-only mode' });
+      if (!authorized(req)) return sendJson(res, 403, { error: 'Forbidden' });
+      const body = await readBody(req);
+      return sendJson(res, 200, await setup.requestFolderAccess(body && body.id));
     }
 
     if (pathname === '/api/installed' && req.method === 'POST') {
@@ -826,7 +954,11 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'POST' || req.method === 'PATCH') {
         if (READ_ONLY) return sendJson(res, 403, { error: 'Dashboard is in read-only mode' });
         if (!authorized(req)) return sendJson(res, 403, { error: 'Forbidden' });
-        return sendJson(res, 200, await onboarding.update(await readBody(req)));
+        const before = await onboarding.get();
+        const body = await readBody(req);
+        const updated = await onboarding.update(body);
+        if (!before.completedAt && updated.completedAt) afterOnboardingComplete();
+        return sendJson(res, 200, updated);
       }
       if (req.method === 'DELETE') {
         if (!authorized(req)) return sendJson(res, 403, { error: 'Forbidden' });
@@ -872,7 +1004,6 @@ server.listen(PORT, HOST, async () => {
     metrics.openStore(METRICS_DB);
     metrics.startSampler();
     setInterval(() => { metrics.pruneStore(); metrics.pruneHistory(); }, 60 * 60 * 1000).unref();
-    notify.startWatcher({ getSample: metrics.getLatest, listJobs, endpointChecks: health.endpointChecks });
     console.log(`Metrics sampler started (${metrics.intervalMs / 1000}s, ${metrics.countSamples()} samples stored)`);
   } catch (error) {
     console.error('[metrics] failed to start sampler:', error.message);
@@ -899,7 +1030,7 @@ server.listen(PORT, HOST, async () => {
       .evaluate(metrics.getLatest(), {
         onTrigger: async (rule, value) => {
           const metric = rules.METRICS[rule.metric] || { label: rule.metric, unit: '' };
-          await notify.notify(`rule:${rule.id}`, 'Vantage alert', `${metric.label} is ${value.toFixed(1)}${metric.unit} (${rule.op} ${rule.threshold}${metric.unit})`, { force: true });
+          if (notifyWatcherStarted) await notify.notify(`rule:${rule.id}`, 'Vantage alert', `${metric.label} is ${value.toFixed(1)}${metric.unit} (${rule.op} ${rule.threshold}${metric.unit})`, { force: true });
           if (rule.action) await runAction(rule.action, rule.params || {}).catch(() => {});
         },
       })
@@ -913,7 +1044,7 @@ server.listen(PORT, HOST, async () => {
         onAction: (task) => runAction(task.action, task.params || {}),
         onDigest: async () => {
           const body = await buildDigest();
-          await notify.notify('schedule-digest', 'Vantage digest', body, { force: true });
+          if (notifyWatcherStarted) await notify.notify('schedule-digest', 'Vantage digest', body, { force: true });
         },
       })
       .catch(() => {});
@@ -921,9 +1052,25 @@ server.listen(PORT, HOST, async () => {
 
   console.log(`Vantage running at http://${HOST}:${PORT}${READ_ONLY ? ' (read-only)' : ''}`);
   if (state.generatedAt) console.log(`Loaded cached inventory from ${state.generatedAt}`);
+
+  // First run: don't walk into protected home folders or fire OS banners before
+  // the wizard has had a chance to explain them. A quick scan fills the UI and a
+  // full pass (plus the notification watcher) starts when onboarding completes.
+  let setupComplete = true;
+  try {
+    const ob = await onboarding.get();
+    setupComplete = Boolean(ob && ob.completedAt);
+  } catch { /* treat as complete */ }
+
+  if (setupComplete) startNotifyWatcher();
+
+  // Warm the SF Symbols catalog in the background so the UI can switch to them
+  // on first load (compiles the helper + renders once, then cached).
+  symbols.available().catch(() => {});
   if (!state.data || cacheIsStale()) {
-    console.log('Cache missing or stale, starting initial scan…');
-    startScan();
+    const deep = setupComplete;
+    console.log(deep ? 'Cache missing or stale, starting initial scan…' : 'First run, starting a quick scan before setup…');
+    startScan({ deep });
   }
 });
 

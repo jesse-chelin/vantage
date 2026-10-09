@@ -7,11 +7,10 @@
 #   curl -fsSL https://raw.githubusercontent.com/jesse-chelin/vantage/main/install.sh | sh
 #
 # Re-run the same command to update. Flags:
-#   --native      also build the native Mac app (default: build if Xcode tools exist)
-#   --no-native   skip the native app
+#   --native      build the native Mac app now (normally built from onboarding)
 #   --uninstall   remove the login service
 #
-# Env overrides: VANTAGE_REPO, VANTAGE_DIR, PORT
+# Env overrides: VANTAGE_REPO, VANTAGE_DIR, PORT, NO_COLOR
 
 set -e
 
@@ -20,7 +19,26 @@ PORT="${PORT:-8790}"
 DEFAULT_DIR="$HOME/Projects/vantage"
 REPO_URL="${VANTAGE_REPO:-}"
 
-say() { printf '%s\n' "$1"; }
+# --- pretty output ---------------------------------------------------------
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  R="$(printf '\033[0m')"
+  B="$(printf '\033[1m')"
+  D="$(printf '\033[2m')"
+  RED="$(printf '\033[31m')"
+  GRN="$(printf '\033[32m')"
+  YEL="$(printf '\033[33m')"
+  CYN="$(printf '\033[36m')"
+else
+  R=""; B=""; D=""; RED=""; GRN=""; YEL=""; CYN=""
+fi
+
+rule() { printf '%s\n' "${D}────────────────────────────────────────────────────${R}"; }
+step() { printf '\n%s %s%s%s\n' "${CYN}▸${R}" "$B" "$1" "$R"; }
+ok()   { printf '  %s %s\n' "${GRN}✓${R}" "$1"; }
+warn() { printf '  %s %s\n' "${YEL}!${R}" "$1"; }
+dim()  { printf '  %s\n' "${D}$1${R}"; }
+key()  { printf '  %s%-12s%s %s\n' "$D" "$1" "$R" "$2"; }
+say()  { printf '%s\n' "$1"; }
 
 # Prefer the directory this script lives in (so a cloned repo updates in place).
 SCRIPT_DIR=""
@@ -37,42 +55,57 @@ if [ "${1:-}" = "--uninstall" ]; then
   PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
   launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || launchctl unload -w "$PLIST" 2>/dev/null || true
   rm -f "$PLIST"
-  say "Removed the Vantage login service. Project files were left in place."
+  printf '\n%s %s\n' "${GRN}✓${R}" "Removed the Vantage login service. Project files were left in place."
   exit 0
 fi
 
-say "Vantage installer"
-say ""
+printf '\n%s\n' "${B}Vantage · installer${R}"
+rule
+dim "$DIR"
 
 # --- code ------------------------------------------------------------------
+step "Checking code"
 if [ ! -f "$DIR/server.js" ]; then
-  command -v git >/dev/null 2>&1 || { say "git is required."; exit 1; }
+  command -v git >/dev/null 2>&1 || { printf '%s\n' "${RED}git is required.${R}"; exit 1; }
   if [ -z "$REPO_URL" ]; then
-    say "No local checkout found. Set VANTAGE_REPO to clone automatically, e.g.:"
-    say "  VANTAGE_REPO=git@github.com:jesse-chelin/vantage.git sh install.sh"
+    printf '%s\n' "${RED}No local checkout found.${R} Set ${B}VANTAGE_REPO${R} to clone automatically, e.g.:"
+    printf '%s\n' "  VANTAGE_REPO=git@github.com:jesse-chelin/vantage.git sh install.sh"
     exit 1
   fi
-  say "Cloning $REPO_URL"
+  dim "cloning $REPO_URL"
   mkdir -p "$(dirname "$DIR")"
   git clone "$REPO_URL" "$DIR"
+  ok "cloned into $DIR"
 elif [ -d "$DIR/.git" ]; then
-  say "Updating $DIR"
-  git -C "$DIR" pull --ff-only || say "(couldn't fast-forward, keeping local files)"
+  if git -C "$DIR" pull --ff-only >/dev/null 2>&1; then
+    ok "updated from git"
+  else
+    warn "couldn't fast-forward, keeping local files"
+  fi
+else
+  dim "local checkout"
 fi
 
 # --- node ------------------------------------------------------------------
+step "Checking Node"
 NODE_BIN="$(command -v node || true)"
-[ -n "$NODE_BIN" ] || { say "Node.js 20+ is required: https://nodejs.org"; exit 1; }
+[ -n "$NODE_BIN" ] || { printf '%s\n' "${RED}Node.js 20+ is required:${R} https://nodejs.org"; exit 1; }
 NODE_MAJOR="$("$NODE_BIN" -p 'process.versions.node.split(".")[0]')"
-[ "$NODE_MAJOR" -ge 20 ] || { say "Node 20+ is required (found $("$NODE_BIN" -v))."; exit 1; }
+[ "$NODE_MAJOR" -ge 20 ] || { printf '%s\n' "${RED}Node 20+ is required (found $("$NODE_BIN" -v)).${R}"; exit 1; }
 NODE_DIR="$(dirname "$NODE_BIN")"
+ok "node $("$NODE_BIN" -v)"
 
 # --- dependencies ----------------------------------------------------------
+step "Installing dependencies"
 if [ -f "$DIR/package.json" ]; then
   (cd "$DIR" && npm install --silent --no-audit --no-fund) >/dev/null 2>&1 || true
+  ok "npm packages ready"
+else
+  dim "no package.json"
 fi
 
 # --- login service (launchd) ----------------------------------------------
+step "Installing the login service"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 mkdir -p "$HOME/Library/LaunchAgents"
 cat > "$PLIST" <<PLIST_EOF
@@ -101,23 +134,27 @@ PLIST_EOF
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST" 2>/dev/null || launchctl load -w "$PLIST" 2>/dev/null || true
 launchctl kickstart -k "gui/$(id -u)/$LABEL" 2>/dev/null || true
+ok "$LABEL loaded"
 
-# --- native app (optional) -------------------------------------------------
-build_native=0
-[ "${1:-}" = "--native" ] && build_native=1
-if [ "${1:-}" != "--no-native" ] && command -v xcrun >/dev/null 2>&1 && xcrun --find swiftc >/dev/null 2>&1; then
-  build_native=1
-fi
-if [ "$build_native" = "1" ]; then
-  say "Building the native Mac app"
-  (cd "$DIR/native" && ./build.sh) || say "(native build skipped)"
+# --- native app (optional, explicit) ---------------------------------------
+# By default the native app is built from the onboarding "Run it as an app"
+# step. Pass --native here only if you want it built straight away.
+if [ "${1:-}" = "--native" ]; then
+  step "Building the native Mac app"
+  if (cd "$DIR/native" && ./build.sh); then
+    ok "Vantage.app built"
+  else
+    warn "native build skipped"
+  fi
 fi
 
 sleep 1
-say ""
-say "Vantage is running:  http://localhost:$PORT"
-say "Login service:       $LABEL"
-say "Logs:                /tmp/vantage.log"
-say "Update:              $DIR/install.sh"
-say "Uninstall:           $DIR/install.sh --uninstall"
+printf '\n%s\n' "${B}Vantage is ready${R}"
+rule
+key "Running" "http://localhost:$PORT"
+key "Service" "$LABEL"
+key "Logs" "/tmp/vantage.log"
+key "Update" "$DIR/install.sh"
+key "Uninstall" "$DIR/install.sh --uninstall"
+printf '\n'
 open "http://localhost:$PORT" 2>/dev/null || true

@@ -50,8 +50,8 @@ git clone git@github.com:jesse-chelin/vantage.git ~/Projects/vantage && ~/Projec
 ```
 
 `install.sh` checks Node, pulls the code, starts Vantage as a **login service**
-(`local.vantage`), builds the native app when Xcode tools are present, and opens
-the dashboard.
+(`local.vantage`), and opens the dashboard. The native Mac app is built from the
+onboarding "Run it as an app" step (or upfront with `install.sh --native`).
 
 Vantage also updates itself. When new commits land on `main`, a small **Update**
 chip appears in the toolbar, **Settings → About** shows the version and status,
@@ -67,14 +67,33 @@ Prefer the terminal? `update.sh` runs the same code path as the in-app updater:
 ~/Projects/vantage/update.sh --native   # also rebuild the native Mac app
 ```
 
-Flags: `--native`, `--no-native`, `--uninstall`. Override the location or port
-with `VANTAGE_DIR` / `PORT`.
+Flags: `--native`, `--uninstall`. Override the location or port with
+`VANTAGE_DIR` / `PORT`.
+
+To test the first-run experience from scratch, `reset.sh` stops and removes the
+login service, backs up and clears `data/`, and drops the native app. It does
+**not** reinstall — run `install.sh` afterwards so the onboarding runs like a
+brand-new install:
+
+```sh
+~/Projects/vantage/reset.sh                 # stop, wipe data, drop native app
+~/Projects/vantage/reset.sh --reinstall     # also run install.sh when done
+~/Projects/vantage/reset.sh --keep-data     # keep settings/Touch ID/push
+~/Projects/vantage/reset.sh --permissions   # also reset macOS folder prompts
+```
+
+Browser site permissions (notifications, persistent storage) are per-origin and
+can't be scripted, and clearing cookies does **not** reset them — in Firefox/Zen
+use "Forget About This Site". The script prints the exact steps. Firefox/Zen has
+no Idle Detection API, so that permission is never asked there.
 
 ## Settings & onboarding
 
-Vantage opens with a **first-run wizard**: welcome → your Mac → your stack →
-appearance → alerts → Touch ID → get-the-app → finish setup. It is skippable,
-resumable, and re-runnable from Settings → About.
+Vantage opens with a **first-run wizard**: welcome → appearance → browser
+permissions → alerts → macOS access → Touch ID → get-the-app → finish setup. It
+is skippable, resumable, and re-runnable from Settings → About. Permissions are
+grouped by type onto their own short steps; each is listed with its current
+state and what it is for, and requested only when you click Grant.
 
 **Settings** is a full surface of its own (sidebar, `⌘,`) covering General,
 Appearance (with a live preview), Notifications, Security, Capabilities, Data,

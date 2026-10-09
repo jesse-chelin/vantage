@@ -109,6 +109,12 @@ const ACCENTS = {
 const DEFAULT_PREFS = { accent: 'system', density: 'comfortable', motion: 'auto', material: 'glass', sidebar: 'expanded', pins: [], notifyBrowser: false, wakeLock: true, touchId: false, idlePause: true };
 let systemAccent = null;
 
+// The "System" swatch must always show the detected macOS accent, never the
+// currently-selected one (otherwise picking e.g. graphite repaints it grey).
+function systemAccentColor() {
+  return (ACCENTS[systemAccent] || ACCENTS.indigo)[0];
+}
+
 function loadPrefs() {
   try {
     const raw = window && window.localStorage ? window.localStorage.getItem(PREFS_KEY) : null;
@@ -323,6 +329,10 @@ const ICONS = {
   file: '<path d="M4 1.8h4.6L12.5 5.6v8.6H4z"/><path d="M8.4 1.8v3.9h4.1"/>',
   sparkle: '<path d="M7 2.2l1.4 3.4L11.8 7 8.4 8.4 7 11.8 5.6 8.4 2.2 7l3.4-1.4z"/><path d="M12.4 10.2l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z"/>',
   sidebar: '<rect x="1.8" y="3" width="12.4" height="10" rx="2"/><path d="M6.4 3v10"/>',
+  monitor: '<rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.6"/><path d="M6 14h4M8 11.2V14"/>',
+  film: '<rect x="1.8" y="2.6" width="12.4" height="10.8" rx="1.6"/><path d="M4.9 2.6v10.8M11.1 2.6v10.8M1.8 8h12.4"/>',
+  music: '<path d="M6.2 11.8V3.4l6-1.3v8.3"/><circle cx="4.4" cy="11.8" r="1.9"/><circle cx="10.4" cy="10.4" r="1.9"/>',
+  camera: '<rect x="1.6" y="4.4" width="12.8" height="8.4" rx="2"/><path d="M5.7 4.4l.9-1.8h2.8l.9 1.8"/><circle cx="8" cy="8.6" r="2.4"/>',
 };
 
 // A few icons are authored on a 24x24 grid (e.g. the fingerprint); everything
@@ -331,10 +341,24 @@ const ICON_24 = {
   fingerprint: '<path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/>',
 };
 
-const svg = (name, extra = '') =>
-  ICON_24[name]
+// Icon ids the server rendered as real SF Symbols. Null until loaded, so the
+// first paint uses the built-in line icons and swaps once the catalog arrives.
+let sfIcons = null;
+let sfVersion = '';
+let sfMasks = null;
+
+function symbolSvg(name, extra = '') {
+  const src = (sfMasks && sfMasks[name]) || `/api/symbol/icon?id=${encodeURIComponent(name)}&size=64${sfVersion ? `&v=${encodeURIComponent(sfVersion)}` : ''}`;
+  const mask = `-webkit-mask:url('${src}') center / contain no-repeat;mask:url('${src}') center / contain no-repeat;`;
+  return `<svg class="sf-symbol" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" ${extra} style="${mask}"></svg>`;
+}
+
+const svg = (name, extra = '') => {
+  if (sfIcons && sfIcons.has(name)) return symbolSvg(name, extra);
+  return ICON_24[name]
     ? `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${ICON_24[name]}</svg>`
     : `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" ${extra}>${ICONS[name] || ''}</svg>`;
+};
 
 // Machine illustrations for the hero + sidebar (drawn locally so the dashboard
 // stays offline and CSP-clean; keyed off the detected Mac model).
@@ -342,17 +366,23 @@ const DEVICE_COLORS = { body: '#c9ced6', bodyDark: '#aab0ba', line: '#969dab', s
 
 function deviceKey(model) {
   const m = String(model || '').toLowerCase();
+  if (!m) return 'mac';
   if (m.includes('macbook')) return 'laptop';
   if (m.includes('imac')) return 'imac';
   if (m.includes('mac pro')) return 'pro';
   if (m.includes('mini')) return 'mini';
-  return 'studio';
+  if (m.includes('studio')) return 'studio';
+  return 'mac';
 }
 
 function deviceArt(model) {
   const c = DEVICE_COLORS;
   const vents = (y) => Array.from({ length: 6 }, (_, i) => `<circle cx="${17 + i * 6}" cy="${y}" r="1" fill="${c.line}" opacity=".5"/>`).join('');
   const art = {
+    mac: `<rect x="12" y="6" width="40" height="26" rx="3.5" fill="${c.screen}" stroke="${c.line}"/>
+      <rect x="14.5" y="8.5" width="35" height="21" rx="1.8" fill="${c.screenGlow}"/>
+      <rect x="27" y="33" width="10" height="3" rx="1" fill="${c.bodyDark}"/>
+      <rect x="21" y="36" width="22" height="2.6" rx="1.3" fill="${c.bodyDark}"/>`,
     studio: `<rect x="7" y="9" width="50" height="26" rx="8" fill="${c.body}" stroke="${c.line}"/>
       <rect x="7" y="27" width="50" height="8" rx="8" fill="${c.bodyDark}"/>
       <rect x="14" y="17" width="26" height="2.6" rx="1.3" fill="${c.line}" opacity=".4"/>
@@ -714,7 +744,7 @@ function viewStorage(data) {
   const max = Math.max(1, ...home.map((h) => h.bytes || 0));
   const homeRowsFixed = home
     .map((h) => `<div class="row clickable" data-dir="${esc(h.path)}" data-search="${esc(h.name.toLowerCase())}">
-      <span class="row-ico-svg">${svg(dirGlyph(h.name))}</span>
+      <span class="row-ico">${folderIconImg(h.name)}</span>
       <div class="row-main"><div class="row-title">${esc(h.name)}</div><div style="margin-top:6px;max-width:320px">${bar(((h.bytes || 0) / max) * 100, 'var(--accent)')}</div></div>
       <div class="row-size">${fmtBytes(h.bytes)}</div>
     </div>`)
@@ -733,6 +763,7 @@ function viewStorage(data) {
   const fileRow = (item, labelPrefix = '') =>
     row({
       title: esc(labelPrefix + item.name),
+      icon: `<span class="row-ico">${fileIconImg(item.name)}</span>`,
       size: fmtBytes(item.bytes),
       actions: `${actBtn('file.reveal', { path: item.path }, 'Reveal')}${actBtn('file.trash', { path: item.path }, 'Trash…', 'danger')}`,
       search: item.name,
@@ -880,6 +911,7 @@ function viewComfy(data) {
     row({
       title: esc(f.name),
       sub: `${fmtBytes(f.bytes)} · added ${esc(relativeTime(f.modifiedAt))}`,
+      icon: `<span class="row-ico">${fileIconImg(f.name)}</span>`,
       actions: `${actBtn('file.reveal', { path: `${comfy.path}/models/checkpoints/${f.name}` }, 'Reveal')}${actBtn('file.trash', { path: `${comfy.path}/models/checkpoints/${f.name}` }, 'Trash…', 'danger')}`,
       search: f.name,
       clickable: true,
@@ -1044,7 +1076,7 @@ function viewServices(data) {
   const ports = Array.isArray(data.ports) ? data.ports : [];
   const portRows = ports.map((p) => `<tr class="clickable" data-port="${p.port}" data-search="${esc(((p.label || '') + ' ' + p.command + ' ' + p.port).toLowerCase())}"><td class="num mono">${p.port}</td><td><span class="td-ico">${svg(serviceGlyph(p.label || p.command))}</span>${esc(p.label || p.command)}</td><td class="mono">${esc(p.command)} <span class="faint">#${p.pid}</span></td><td class="mono">${esc((p.hosts || []).join(', '))}</td></tr>`);
 
-  const agentRows = (services.launchAgents || []).map((a) => row({ title: esc(a.name), size: fmtBytes(a.bytes), sub: `modified ${esc(relativeTime(a.modifiedAt))}`, search: a.name, icon: `<span class="row-ico-svg">${svg('gears')}</span>` })).join('');
+  const agentRows = (services.launchAgents || []).map((a) => row({ title: esc(a.name), size: fmtBytes(a.bytes), sub: `modified ${esc(relativeTime(a.modifiedAt))}`, search: a.name, icon: `<span class="row-ico">${fileIconImg(a.name)}</span>` })).join('');
 
   return [
     `<div id="health-root">${skeletonRows(3)}</div>`,
@@ -1931,6 +1963,22 @@ function dirGlyph(name) {
   return 'folder';
 }
 
+// Native macOS art: real Finder folder icons and document-type icons, served by
+// the server so the app matches the rest of the OS.
+const FOLDER_NAME_ICON = { desktop: 'desktop', documents: 'documents', downloads: 'downloads', movies: 'movies', music: 'music', pictures: 'pictures' };
+
+function folderIconId(name) {
+  return FOLDER_NAME_ICON[String(name || '').toLowerCase()] || 'default';
+}
+
+function folderIconImg(name) {
+  return `<img class="file-ico" data-fallback="${esc(dirGlyph(name))}" loading="lazy" decoding="async" alt="" src="/api/folder/icon?id=${esc(folderIconId(name))}&size=64" />`;
+}
+
+function fileIconImg(name) {
+  return `<img class="file-ico" data-fallback="file" loading="lazy" decoding="async" alt="" src="/api/file/icon?name=${encodeURIComponent(String(name || ''))}&size=48" />`;
+}
+
 function reclaimGlyph(item) {
   const id = String((item && (item.id || item.label)) || '').toLowerCase();
   if (/ollama|orphan|model/.test(id)) return 'brain';
@@ -2423,6 +2471,7 @@ async function showLargestFiles(target) {
         row({
           title: esc(file.name),
           sub: esc(file.path.replace(target, '~')),
+          icon: `<span class="row-ico">${fileIconImg(file.name)}</span>`,
           size: fmtBytes(file.bytes),
           actions: `${actBtn('file.reveal', { path: file.path }, 'Reveal')}${actBtn('file.trash', { path: file.path }, 'Trash…', 'danger')}`,
           search: file.path,
@@ -3304,7 +3353,7 @@ function prefRow(title, sub, key, checked) {
 
 function profileBody(p) {
   const groups = (p.groups || []).map((g) => `<span class="chip" data-search="${esc(g.toLowerCase())}">${esc(g)}</span>`).join('');
-  const swatches = `<button class="accent-swatch${prefs.accent === 'system' ? ' active' : ''}" data-pref-accent="system" title="System (${esc(systemAccent || 'detecting…')})" style="background:var(--accent)"></button>${Object.entries(ACCENTS)
+  const swatches = `<button class="accent-swatch${prefs.accent === 'system' ? ' active' : ''}" data-pref-accent="system" title="System (${esc(systemAccent || 'detecting…')})" style="background:${systemAccentColor()}"></button>${Object.entries(ACCENTS)
     .map(([name, pair]) => `<button class="accent-swatch${prefs.accent === name ? ' active' : ''}" data-pref-accent="${name}" title="${esc(name)}" style="background:${pair[0]}"></button>`)
     .join('')}`;
   return `
@@ -3808,7 +3857,7 @@ async function showDirDetail(target) {
     if (tree.error) throw new Error(tree.error);
     const children = (tree.children || []).filter((c) => c.bytes > 0).slice(0, 40);
     const body = kv([['Path', mono(tree.path)], ['Total', fmtBytes(tree.totalBytes)], ['Children', children.length]]) +
-      `<div class="rows">${children.map((c) => row({ title: `${esc(c.name)}${c.isDirectory ? '' : ' <span class="faint">file</span>'}`, size: fmtBytes(c.bytes), actions: c.isDirectory ? `<button class="btn small" data-dir="${esc(c.path)}">Open</button>` : actBtn('file.reveal', { path: c.path }, 'Reveal'), search: c.name, icon: `<span class="row-ico-svg">${svg(c.isDirectory ? dirGlyph(c.name) : 'file')}</span>` })).join('') || '<div class="empty-note">Empty</div>'}</div>`;
+      `<div class="rows">${children.map((c) => row({ title: `${esc(c.name)}${c.isDirectory ? '' : ' <span class="faint">file</span>'}`, size: fmtBytes(c.bytes), actions: c.isDirectory ? `<button class="btn small" data-dir="${esc(c.path)}">Open</button>` : actBtn('file.reveal', { path: c.path }, 'Reveal'), search: c.name, icon: `<span class="row-ico">${c.isDirectory ? folderIconImg(c.name) : fileIconImg(c.name)}</span>` })).join('') || '<div class="empty-note">Empty</div>'}</div>`;
     const actions = `${actBtn('file.reveal', { path: tree.path }, 'Reveal')}<button class="btn small" data-largest="${esc(tree.path)}">Largest files</button><button class="btn small" data-disk-explore="${esc(tree.path)}">Explore map</button>`;
     openPanel({ title: baseName(tree.path) || tree.path, subtitle: fmtBytes(tree.totalBytes), body, actions });
   } catch (error) {
@@ -6045,6 +6094,10 @@ document.addEventListener(
     const img = event.target;
     if (img && img.tagName === 'IMG' && img.classList.contains('device-img') && img.parentElement) {
       img.parentElement.innerHTML = `<div class="device-art-wrap">${deviceArt(img.getAttribute('data-device') || '')}</div>`;
+    } else if (img && img.tagName === 'IMG' && img.classList.contains('folder-ico') && img.parentElement) {
+      img.parentElement.innerHTML = svg(FOLDER_ICONS[img.getAttribute('data-folder')] || 'folder');
+    } else if (img && img.tagName === 'IMG' && img.classList.contains('file-ico') && img.parentElement) {
+      img.parentElement.innerHTML = svg(img.getAttribute('data-fallback') || 'file');
     }
   },
   true,
@@ -6103,6 +6156,19 @@ state.idle = false;
 let persistentState = null; // null until probed
 let installPrompt = null;
 let wakeLock = null;
+
+// Ask the browser to keep Vantage's shell in persistent storage. Called only
+// from an explained onboarding/Settings action, never automatically on load.
+async function ensurePersistentStorage() {
+  if (!CAPS.persistentStorage) return false;
+  try {
+    persistentState = await navigator.storage.persisted();
+    if (!persistentState) persistentState = await navigator.storage.persist();
+    return persistentState === true;
+  } catch {
+    return false;
+  }
+}
 let jobFailures = 0;
 let touchIdNudged = false;
 
@@ -6237,10 +6303,13 @@ function swReady(timeoutMs = 4000) {
   ]);
 }
 
+// Returns true when the browser accepted the notification. It cannot detect an
+// OS-level mute (System Settings → Notifications / Focus), so callers should
+// word success as "sent" rather than a guarantee it was seen.
 async function previewBrowserNotification() {
   if (NATIVE) {
     await NATIVE.notify('Vantage test', 'If you can see this, notifications work.');
-    return;
+    return true;
   }
   if (!CAPS.notifications) throw new Error('Notifications are not supported here');
   const ok = await ensureNotifyPermission();
@@ -6257,12 +6326,14 @@ async function previewBrowserNotification() {
     if (navigator.serviceWorker && navigator.serviceWorker.ready) {
       const registration = await swReady();
       await registration.showNotification(title, options);
-      return;
+      const live = await registration.getNotifications({ tag: options.tag }).catch(() => null);
+      return !live || live.length > 0;
     }
   } catch {
     /* fall through to the constructor */
   }
   new Notification(title, options);
+  return true;
 }
 
 function browserName() {
@@ -6384,10 +6455,64 @@ function toggleKiosk() {
 
 // --- idle pause ------------------------------------------------------------
 
+let idleGranted = false;
+let idlePermissionState = 'not asked'; // 'not asked' | 'granted' | 'denied' | 'unsupported'
+let idleDetectorReady = false;
+let idleFallbackAttached = false;
+let idleNativeTimer = null;
+
+async function refreshIdlePermission() {
+  if (NATIVE) {
+    idleGranted = true;
+    idlePermissionState = 'granted';
+    return;
+  }
+  if (!CAPS.idleDetection || typeof IdleDetector === 'undefined') {
+    idlePermissionState = 'unsupported';
+    return;
+  }
+  try {
+    const status = await navigator.permissions.query({ name: 'idle-detection' });
+    idlePermissionState = status.state === 'granted' ? 'granted' : status.state === 'denied' ? 'denied' : 'not asked';
+    idleGranted = idlePermissionState === 'granted';
+  } catch {
+    idlePermissionState = 'not asked';
+  }
+}
+
+async function idlePermissionGranted() {
+  await refreshIdlePermission();
+  return idleGranted;
+}
+
+// Request the idle-detection permission. Only ever called from an explicit,
+// explained action (the onboarding permissions step, or Settings), never on
+// load, so the browser prompt always arrives with context.
+async function enableIdleDetection() {
+  if (NATIVE) return true;
+  if (!CAPS.idleDetection || typeof IdleDetector === 'undefined') {
+    idlePermissionState = 'unsupported';
+    return false;
+  }
+  try {
+    const result = await IdleDetector.requestPermission();
+    idlePermissionState = result === 'granted' ? 'granted' : result === 'denied' ? 'denied' : 'not asked';
+    if (result !== 'granted') return false;
+    idleGranted = true;
+    await initIdle();
+    return true;
+  } catch {
+    idlePermissionState = 'denied';
+    return false;
+  }
+}
+
 async function initIdle() {
   if (!prefs.idlePause) return;
   if (NATIVE) {
-    setInterval(() => {
+    idlePermissionState = 'granted';
+    if (idleNativeTimer) return;
+    idleNativeTimer = setInterval(() => {
       NATIVE.idleSeconds()
         .then((seconds) => {
           state.idle = seconds > 120;
@@ -6397,9 +6522,12 @@ async function initIdle() {
     }, 30_000);
     return;
   }
-  if (CAPS.idleDetection) {
+  // Only use the OS detector when the permission is already granted, otherwise
+  // fall back to tab visibility. We never prompt here.
+  await refreshIdlePermission();
+  if (idleGranted) {
+    if (idleDetectorReady) return;
     try {
-      if ((await IdleDetector.requestPermission()) !== 'granted') return;
       const detector = new IdleDetector();
       detector.addEventListener('change', () => {
         state.idle = detector.userState === 'idle';
@@ -6407,11 +6535,14 @@ async function initIdle() {
         if (!state.idle) renderView();
       });
       await detector.start({ threshold: 120_000 });
+      idleDetectorReady = true;
       return;
     } catch {
       /* fall through to visibility heuristic */
     }
   }
+  if (idleFallbackAttached) return;
+  idleFallbackAttached = true;
   document.addEventListener('visibilitychange', () => {
     state.idle = document.hidden;
     document.body.classList.toggle('idle', state.idle);
@@ -6552,7 +6683,7 @@ async function handleBoolPref(toggle, key, checked) {
     if (checked) acquireWakeLock();
     else releaseWakeLock();
   }
-  if (key === 'idlePause' && checked) initIdle();
+  if (key === 'idlePause' && checked) enableIdleDetection().catch(() => {});
   setPref(key, checked);
 }
 
@@ -6659,14 +6790,56 @@ function capabilityRows() {
 
 // --- Web Push (client) -----------------------------------------------------
 
+function sameBytes(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ]);
+}
+
+// Subscribing with a key that differs from an existing subscription throws in
+// Firefox ("A subscription with a different application server key already
+// exists"). If the server's VAPID key rotated, drop the stale one and re-subscribe.
+// Every await is time-boxed so the wizard can never spin forever waiting on the
+// service worker or a slow push service.
+async function subscribePush() {
+  const status = await withTimeout(api('/api/push/status'), 8000, 'Could not reach the Vantage server');
+  await registerServiceWorker();
+  const registration = await swReady(8000);
+  const desired = fromB64url(status.publicKey);
+  let subscription = await withTimeout(registration.pushManager.getSubscription(), 5000, 'Push manager did not respond').catch(() => null);
+  if (subscription) {
+    const existing = subscription.options && subscription.options.applicationServerKey
+      ? new Uint8Array(subscription.options.applicationServerKey)
+      : null;
+    // Rotate when the server key changed, or when the browser hides the old key.
+    if (!existing || !sameBytes(existing, desired)) {
+      await withTimeout(subscription.unsubscribe(), 5000, 'Could not reset the old subscription').catch(() => {});
+      subscription = null;
+    }
+  }
+  if (!subscription) {
+    subscription = await withTimeout(
+      registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: desired }),
+      20000,
+      'Timed out contacting the push service. Check your connection and try again.',
+    );
+  }
+  await withTimeout(api('/api/push/subscribe', { method: 'POST', body: subscription.toJSON() }), 8000, 'Could not save the subscription');
+  state.push = { subscriptions: 1, publicKey: status.publicKey };
+  return subscription;
+}
+
 async function enablePush() {
   if (!CAPS.push) return toast('Push is not supported here', 'error');
   try {
-    const status = await api('/api/push/status');
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromB64url(status.publicKey) });
-    await api('/api/push/subscribe', { method: 'POST', body: subscription.toJSON() });
-    state.push = { subscriptions: 1, publicKey: status.publicKey };
+    await subscribePush();
     toast('Push notifications enabled', 'good');
   } catch (error) {
     toast(`Could not enable push: ${error.message}`, 'error');
@@ -6675,11 +6848,11 @@ async function enablePush() {
 
 async function disablePush() {
   try {
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.getSubscription();
+    const registration = await swReady(8000);
+    const subscription = await withTimeout(registration.pushManager.getSubscription(), 5000, 'Push manager did not respond').catch(() => null);
     if (subscription) {
-      await api('/api/push/unsubscribe', { method: 'POST', body: { endpoint: subscription.endpoint } });
-      await subscription.unsubscribe();
+      await withTimeout(api('/api/push/unsubscribe', { method: 'POST', body: { endpoint: subscription.endpoint } }), 8000, 'Could not reach the Vantage server').catch(() => {});
+      await withTimeout(subscription.unsubscribe(), 5000, 'Could not remove the subscription').catch(() => {});
     }
     state.push = { subscriptions: 0, publicKey: state.push && state.push.publicKey };
     toast('Push notifications disabled', 'good');
@@ -6781,7 +6954,6 @@ async function initCapabilities() {
   if (CAPS.persistentStorage) {
     try {
       persistentState = await navigator.storage.persisted();
-      if (!persistentState) persistentState = await navigator.storage.persist();
     } catch {
       persistentState = false;
     }
@@ -6796,6 +6968,7 @@ async function initCapabilities() {
     try { const info = await NATIVE.touchIdAvailable(); nativeTouchIdAvailable = Boolean(info && info.available); } catch { nativeTouchIdAvailable = false; }
   }
   if (prefs.idlePause) initIdle();
+  else refreshIdlePermission().catch(() => {});
   initDragDrop();
   syncWakeLock();
   syncBadge();
@@ -6822,7 +6995,7 @@ els.modalRoot.addEventListener('click', (event) => {
 
 const settingsState = { data: null, section: 'general', profile: null, loading: false, error: null, notify: null, notifyLoading: false, notifyTried: false, dataInfo: null, dataInfoLoading: false, dataInfoTried: false };
 const onboardingState = { server: null, step: 0, profile: null };
-const setupState = { data: null, loading: false };
+const setupState = { data: null, loading: false, folders: {} };
 
 async function loadSetup(reRender = true) {
   if (setupState.loading) return;
@@ -6830,6 +7003,17 @@ async function loadSetup(reRender = true) {
   try { setupState.data = await api('/api/setup'); } catch { /* keep prior */ }
   setupState.loading = false;
   if (reRender && els.onboardingRoot && els.onboardingRoot.classList.contains('open')) renderOnboarding('none');
+}
+
+// Probing Full Disk Access reads ~/Library/Mail, which makes macOS show its
+// "access data from other apps" prompt. Only ever called from an explicit
+// Re-check click, never while a step renders.
+async function loadSetupFda() {
+  try {
+    const { fullDiskAccess } = await api('/api/setup/full-disk-access');
+    setupState.data = { ...(setupState.data || {}), fullDiskAccess };
+  } catch { /* keep prior */ }
+  if (els.onboardingRoot && els.onboardingRoot.classList.contains('open')) renderOnboarding('none');
 }
 
 function settingsCaps() {
@@ -6873,7 +7057,7 @@ function settingControl(entry, value, caps) {
   }
   if (entry.id === 'appearance.accent') {
     const names = ['system', ...Object.keys(ACCENTS)];
-    return `<div class="settings-swatches">${names.map((name) => `<button class="accent-swatch${value === name ? ' active' : ''}" type="button" data-setting-accent="${esc(name)}" title="${esc(name)}" aria-label="${esc(name)}" style="background:${name === 'system' ? 'var(--accent)' : ACCENTS[name][0]}"></button>`).join('')}</div>`;
+    return `<div class="settings-swatches">${names.map((name) => `<button class="accent-swatch${value === name ? ' active' : ''}" type="button" data-setting-accent="${esc(name)}" title="${esc(name)}" aria-label="${esc(name)}" style="background:${name === 'system' ? systemAccentColor() : ACCENTS[name][0]}"></button>`).join('')}</div>`;
   }
   if (entry.type === 'select') {
     if (entry.options.length <= 5) {
@@ -7491,6 +7675,10 @@ async function handleSettingToggle(toggle) {
       return;
     }
   }
+  if (id === 'behavior.idlePause' && toggle.checked) {
+    // Prompt for idle detection here, where the toggle explains what it's for.
+    await enableIdleDetection().catch(() => {});
+  }
   patchSettings({ [id]: toggle.checked });
 }
 
@@ -7674,17 +7862,16 @@ els.view.addEventListener('change', (event) => {
 
 // --- onboarding wizard -----------------------------------------------------
 
-const ONBOARDING_SEQUENCE = ['welcome', 'machine', 'stack', 'appearance', 'alerts', 'security', 'app', 'finish', 'ready'];
+const ONBOARDING_SEQUENCE = ['welcome', 'appearance', 'permissions', 'alerts', 'system', 'security', 'app', 'finish'];
 const ONBOARDING_META = {
   welcome: { icon: 'sparkle', title: 'Welcome to Vantage', lede: 'Manage everything on your Mac, apps, storage, services, network, security and AI, from one local console. Nothing leaves this machine.' },
-  machine: { icon: 'app', title: 'This is your Mac', lede: 'We detected your setup so you don’t have to configure it.' },
-  stack: { icon: 'brain', title: 'Here’s what we found', lede: 'Vantage already knows your apps, models, runtimes and services.' },
   appearance: { icon: 'sparkle', title: 'Make it yours', lede: 'Pick an accent and density. You can change these anytime in Settings.' },
+  permissions: { icon: 'shield', title: 'Browser permissions', lede: 'Grant what you’re comfortable with, one at a time. Every choice is reversible.' },
   alerts: { icon: 'bell', title: 'Stay in the loop', lede: 'Choose how Vantage tells you when a job finishes, fails, or disk runs low.' },
+  system: { icon: 'gears', title: 'macOS access', lede: 'A few System Settings toggles let Vantage do its best work on this Mac.' },
   security: { icon: 'shield', title: 'Protect destructive actions', lede: 'Require your fingerprint before deleting a model, pruning disk, or uninstalling.' },
   app: { icon: 'grid', title: 'Run it as an app', lede: 'The native Mac app is the fullest way to run Vantage, or install it as a lightweight web app.' },
-  finish: { icon: 'gears', title: 'Finish setup', lede: 'A couple of macOS permissions let Vantage do its best work. We’ll open System Settings for you.' },
-  ready: { icon: 'check', title: 'You’re all set', lede: 'Here’s a summary. You can re-run this from Settings → About anytime.' },
+  finish: { icon: 'disk', title: 'Measure your disk', lede: 'Grant the folders macOS protects and Vantage reads them once to finish setup.' },
 };
 
 function wizardToggle(id, label, help) {
@@ -7698,12 +7885,25 @@ function setStatusEl(el, text, kind = '') {
   el.className = `wc-status ${kind}`;
 }
 
+// Shared layout for every wizard card: a header row (icon, title, trailing
+// control), a body of explanation lines, and a footer row (transient status on
+// the left, actions on the right) so nothing ever collides.
+function wizardInfoCard({ id, icon, title, titleExtra = '', body = '', trailing = '', action = '' }) {
+  return `<div class="wizard-card col">
+    <div class="wc-head">
+      ${icon ? `<span class="wc-ico">${svg(icon)}</span>` : ''}
+      <div class="wc-title">${esc(title)}${titleExtra}</div>
+      ${trailing}
+    </div>
+    ${body ? `<div class="wc-body">${body}</div>` : ''}
+    ${action ? `<div class="wc-foot"><span class="wc-status" data-ob-status="${esc(id || '')}"></span><div class="wc-actions">${action}</div></div>` : ''}
+  </div>`;
+}
+
 function wizardAlertRow(id, label, help, actionHtml) {
   const value = settingsState.data ? settingsState.data.values[id] : false;
-  return `<div class="wizard-card">
-    <div class="wc-main"><div class="wc-title">${esc(label)}</div><div class="wc-help">${esc(help)}</div></div>
-    <div class="wc-actions"><span class="wc-status" data-ob-status="${esc(id)}"></span>${actionHtml}<label class="switch"><input type="checkbox" data-setting-toggle="${esc(id)}" ${value ? 'checked' : ''}><span class="switch-track"></span></label></div>
-  </div>`;
+  const toggle = `<label class="switch"><input type="checkbox" data-setting-toggle="${esc(id)}" ${value ? 'checked' : ''}><span class="switch-track"></span></label>`;
+  return wizardInfoCard({ id, title: label, body: `<div class="wc-help">${esc(help)}</div>`, trailing: toggle, action: actionHtml || '' });
 }
 
 async function wizardTest(channel, statusEl) {
@@ -7711,10 +7911,12 @@ async function wizardTest(channel, statusEl) {
   try {
     let previewed = false;
     if (channel === 'push' || channel === 'all') {
-      try { await previewBrowserNotification(); previewed = true; } catch { /* preview is best-effort */ }
+      try { previewed = await previewBrowserNotification(); } catch { /* preview is best-effort */ }
     }
     const result = await api('/api/notify/test', { method: 'POST', body: { channel } });
-    setStatusEl(statusEl, `${previewed ? 'Shown here ✓ · ' : ''}${result.message || 'Sent'}`, 'ok');
+    const pushFailed = channel === 'push' && result.failed > 0;
+    const kind = pushFailed ? 'bad' : 'ok';
+    setStatusEl(statusEl, `${previewed ? 'browser banner sent · ' : ''}${result.message || 'Sent'}`, kind);
     return result;
   } catch (error) {
     setStatusEl(statusEl, error.message, 'bad');
@@ -7726,11 +7928,7 @@ async function wizardEnablePush(statusEl) {
   setStatusEl(statusEl, 'enabling…');
   try {
     if (!CAPS.push) throw new Error('Push is not supported here');
-    const status = await api('/api/push/status');
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromB64url(status.publicKey) });
-    await api('/api/push/subscribe', { method: 'POST', body: subscription.toJSON() });
-    state.push = { subscriptions: 1, publicKey: status.publicKey };
+    await subscribePush();
     setStatusEl(statusEl, 'enabled', 'ok');
     setTimeout(() => { if (els.onboardingRoot.classList.contains('open')) renderOnboarding(); }, 700);
   } catch (error) {
@@ -7771,24 +7969,232 @@ function onboardingSetupRow(ok, title, help, action) {
   return `<div class="wizard-card"><div class="wc-main"><div class="wc-title">${esc(title)}</div><div class="wc-help">${esc(help)}</div></div><div class="wc-actions"><span class="wc-status ${ok ? 'ok' : ''}">${ok ? 'ready' : 'needs setup'}</span>${action || ''}</div></div>`;
 }
 
+// A permission request is only shown alongside why Vantage wants it, why it is
+// safe, its current state, and a button that requests just that one thing.
+const PERM_STATE = {
+  granted: ['granted', 'good'],
+  subscribed: ['subscribed', 'good'],
+  ready: ['ready', 'good'],
+  'not asked': ['not asked', ''],
+  denied: ['blocked', 'bad'],
+  missing: ['not found', ''],
+  unsupported: ['not available', ''],
+  unknown: ['not checked', ''],
+};
+
+const FOLDER_ICONS = { desktop: 'monitor', documents: 'file', downloads: 'download', movies: 'film', music: 'music', pictures: 'photo', photos: 'camera' };
+
+function permissionCard(def) {
+  const [label, kind] = PERM_STATE[def.state] || [def.state, ''];
+  const body = `<div class="wc-help">${esc(def.why)}</div>
+    <div class="wc-help dim">Safe to grant: ${esc(def.safe)}</div>
+    ${def.hint ? `<div class="wc-help dim">${esc(def.hint)}</div>` : ''}`;
+  return wizardInfoCard({
+    id: def.id,
+    icon: def.icon,
+    title: def.title,
+    body,
+    trailing: pill(label, kind),
+    action: def.action || '',
+  });
+}
+
+// Browser-side permissions, each with its exact state and a single-purpose
+// action. Nothing here fires on its own.
+function browserPermissionDefs() {
+  const defs = [];
+  const rawNotif = NATIVE ? 'granted' : !CAPS.notifications ? 'unsupported' : Notification.permission;
+  const notifState = rawNotif === 'default' ? 'not asked' : rawNotif;
+  defs.push({
+    id: 'notifications',
+    icon: 'bell',
+    title: 'Desktop notifications',
+    why: 'Tell you the moment a long job finishes, fails, or disk runs low.',
+    safe: 'your browser draws a local banner on this Mac. Nothing is sent anywhere.',
+    hint: 'No banner on a test? Allow your browser in System Settings → Notifications, and turn off Focus.',
+    state: notifState,
+    action: notifState === 'granted'
+      ? '<button class="btn small" data-perm="notifications-test">Test</button>'
+      : notifState === 'denied'
+        ? '<button class="btn small" data-perm="notifications-help">How to allow</button>'
+        : notifState === 'unsupported'
+          ? ''
+          : '<button class="btn small primary" data-perm="notifications">Grant</button>',
+  });
+
+  if (CAPS.push) {
+    const subs = state.push ? state.push.subscriptions : 0;
+    defs.push({
+      id: 'push',
+      icon: 'globe',
+      title: 'Web Push',
+      why: 'Deliver alerts even when the Vantage tab is closed.',
+      safe: 'alerts are encrypted to this browser and sent via your browser’s push service.',
+      state: subs > 0 ? 'subscribed' : 'not asked',
+      action: subs > 0
+        ? '<button class="btn small" data-perm="push-test">Test</button>'
+        : '<button class="btn small primary" data-perm="push">Grant</button>',
+    });
+  }
+
+  if (CAPS.idleDetection) {
+    defs.push({
+      id: 'idle',
+      icon: 'clock',
+      title: 'Pause when you’re away',
+      why: 'Stop background polling while you step away, so Vantage stays quiet.',
+      safe: 'only macOS idle state is read, on-device. It is never stored or sent.',
+      state: idleGranted ? 'granted' : idlePermissionState,
+      action: idleGranted
+        ? ''
+        : idlePermissionState === 'denied'
+          ? '<button class="btn small" data-perm="idle-help">Blocked</button>'
+          : '<button class="btn small primary" data-perm="idle">Grant</button>',
+    });
+  }
+
+  if (CAPS.persistentStorage) {
+    defs.push({
+      id: 'storage',
+      icon: 'download',
+      title: 'Reliable offline storage',
+      why: 'Keep the app shell cached so Vantage still opens without a network.',
+      safe: 'only Vantage’s own app files live in your browser cache.',
+      state: persistentState === true ? 'granted' : 'not asked',
+      action: persistentState === true ? '' : '<button class="btn small primary" data-perm="storage">Grant</button>',
+    });
+  }
+
+  return defs;
+}
+
+// macOS-side access, grouped on its own step so the list stays short. These
+// can't be granted from a web API, so each opens the exact System Settings pane.
+function macosPermissionDefs() {
+  const s = setupState.data || {};
+  const defs = [];
+
+  defs.push({
+    id: 'macos',
+    icon: 'app',
+    title: 'Background macOS banners',
+    why: 'Let a small Vantage helper post System banners even when no tab is open.',
+    safe: 'the helper posts banners locally; nothing leaves this Mac.',
+    hint: 'After installing, allow “terminal-notifier” (or “Script Editor”) in System Settings → Notifications.',
+    state: s.notifier === 'terminal-notifier' ? 'ready' : 'not asked',
+    action: s.notifier === 'terminal-notifier'
+      ? '<button class="btn small" data-perm="macos-test">Test</button>'
+      : '<button class="btn small primary" data-perm="helper">Install helper</button><button class="btn small" data-setup-open="notifications">Settings</button>',
+  });
+
+  defs.push({
+    id: 'fda',
+    icon: 'shield',
+    title: 'Full Disk Access',
+    why: `Measure where your disk space went, including folders macOS protects. In Full Disk Access, add your Node binary${s.nodePath ? ` (${s.nodePath})` : ''}.`,
+    safe: 'only totals are read, on this Mac. File contents are never uploaded.',
+    hint: s.nodePath ? 'If it’s hidden in the file picker, press ⌘⇧G and paste the path.' : '',
+    state: s.fullDiskAccess === true ? 'granted' : s.fullDiskAccess === false ? 'denied' : 'unknown',
+    action: s.fullDiskAccess === true
+      ? ''
+      : '<button class="btn small" data-perm="fda-open">Open Settings</button><button class="btn small" data-perm="fda-recheck">Re-check</button>',
+  });
+
+  defs.push({
+    id: 'login',
+    icon: 'bolt',
+    title: 'Launch at login',
+    why: 'Keep Vantage running after a restart so alerts and schedules keep working.',
+    safe: 'it starts a local process on this Mac only.',
+    state: s.launchdLoaded ? 'granted' : 'not asked',
+    action: s.launchdLoaded ? '' : '<button class="btn small" data-perm="login">Open Login Items</button>',
+  });
+
+  return defs;
+}
+
+// Fulfils a single permission card's action. Each branch requests exactly one
+// thing; a throw is surfaced on the card by the caller.
+async function handlePermissionAction(action, statusEl) {
+  switch (action) {
+    case 'notifications': {
+      const ok = await ensureNotifyPermission();
+      if (!ok) throw new Error('Notification permission was not granted');
+      await patchSettings({ 'behavior.notifyBrowser': true });
+      break;
+    }
+    case 'notifications-test':
+      await previewBrowserNotification();
+      return;
+    case 'notifications-help':
+    case 'idle-help':
+      showNotifyHelp();
+      return;
+    case 'push':
+      await wizardEnablePush(statusEl);
+      return;
+    case 'push-test':
+      await wizardTest('push', statusEl);
+      return;
+    case 'idle': {
+      const ok = await enableIdleDetection();
+      if (!ok) throw new Error(idlePermissionState === 'denied' ? 'Blocked in this browser' : 'Not available here');
+      break;
+    }
+    case 'storage': {
+      const ok = await ensurePersistentStorage();
+      if (!ok) throw new Error('Not available in this browser');
+      break;
+    }
+    case 'helper':
+      runAction('brew.install', { name: 'terminal-notifier', kind: 'formula' });
+      for (let i = 0; i < 40; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await loadSetup(false);
+        if (setupState.data && setupState.data.notifier === 'terminal-notifier') break;
+      }
+      break;
+    case 'macos-test':
+      await wizardTest('macos', statusEl);
+      return;
+    case 'fda-open':
+      runAction('system.openFullDiskAccess', {});
+      return;
+    case 'fda-recheck':
+      await loadSetupFda();
+      return;
+    case 'login':
+      runAction('system.openLoginItems', {});
+      return;
+    default:
+      return;
+  }
+  if (els.onboardingRoot && els.onboardingRoot.classList.contains('open')) renderOnboarding('none');
+}
+
+// The full inventory scan can still be running when the wizard first paints.
+// Fall back to the lightweight profile probe (no disk walk) so the hero shows
+// the actual Mac instead of defaulting to another model.
+function wizardSystem() {
+  const inventory = (state.data && state.data.system) || {};
+  const profile = onboardingState.profile || {};
+  return {
+    model: inventory.model || profile.model || null,
+    chip: inventory.chip || profile.chip || null,
+    physicalMemoryLabel: inventory.physicalMemoryLabel || profile.physicalMemoryLabel || null,
+    macos: inventory.macos || (profile.macos ? `macOS ${profile.macos}` : null),
+    hostname: inventory.hostname || profile.hostname || null,
+  };
+}
+
 function onboardingStepBody(step) {
   if (step === 'welcome') {
-    const system = (state.data && state.data.system) || {};
-    return `<div class="wizard-hero">${deviceBadge(system.model)}</div>`;
+    return `<div class="wizard-hero">${deviceBadge(wizardSystem().model)}</div>`;
   }
-  if (step === 'machine') {
-    const p = onboardingState.profile || {};
-    return `<div class="wizard-cards">${card(`<dl class="kv">
-      <dt>Machine</dt><dd>${esc(p.hostname || '–')}</dd>
-      <dt>User</dt><dd>${esc(p.username || '–')}</dd>
-      <dt>macOS</dt><dd>${esc(p.macos || '–')}</dd>
-    </dl>`)}</div>`;
-  }
-  if (step === 'stack') return onboardingStackChips();
   if (step === 'appearance') {
     const names = ['system', ...Object.keys(ACCENTS)];
     const swatches = names
-      .map((name) => `<button class="accent-swatch${prefs.accent === name ? ' active' : ''}" data-ob-accent="${name}" title="${esc(name)}" style="background:${name === 'system' ? 'var(--accent)' : ACCENTS[name][0]}"></button>`)
+      .map((name) => `<button class="accent-swatch${prefs.accent === name ? ' active' : ''}" data-ob-accent="${name}" title="${esc(name)}" style="background:${name === 'system' ? systemAccentColor() : ACCENTS[name][0]}"></button>`)
       .join('');
     const density = settingsState.data ? settingsState.data.values['appearance.density'] : 'comfortable';
     const densityControl = `<div class="wizard-card"><div class="wc-main"><div class="wc-title">Density</div><div class="wc-help">Comfortable spacing, or compact to fit more on screen.</div></div><div class="wc-actions"><div class="segmented">${['comfortable', 'compact'].map((o) => `<button class="seg${density === o ? ' active' : ''}" data-ob-density="${o}">${o === 'comfortable' ? 'Comfortable' : 'Compact'}</button>`).join('')}</div></div></div>`;
@@ -7798,76 +8204,100 @@ function onboardingStepBody(step) {
   if (step === 'alerts') {
     const notifPerm = NATIVE ? 'granted' : CAPS.notifications ? Notification.permission : 'unsupported';
     const pushSubs = state.push ? state.push.subscriptions : 0;
-    const helperNeeded = setupState.data && setupState.data.notifier === 'osascript';
-    const browserAction = notifPerm === 'granted'
+    const browserReady = notifPerm === 'granted';
+    const browserAction = browserReady
       ? '<button class="btn small" data-ob-test-browser>Test</button>'
-      : notifPerm === 'denied'
-        ? '<button class="btn small" data-ob-notify-help>How to allow</button>'
-        : '<button class="btn small primary" data-ob-browser>Allow</button>';
-    const pushAction = !CAPS.push ? '' : pushSubs > 0 ? '<button class="btn small" data-ob-test="push">Test</button>' : '<button class="btn small" data-ob-push>Allow</button>';
+      : '<span class="wc-status">set up on the previous step</span>';
+    const pushAction = !CAPS.push
+      ? ''
+      : pushSubs > 0
+        ? '<button class="btn small" data-ob-test="push">Test</button>'
+        : '<span class="wc-status">set up on the previous step</span>';
     return `<div class="wizard-cards">
-      ${helperNeeded ? onboardingSetupRow(false, 'Background macOS banners need a helper', 'Install terminal-notifier, then allow it in System Settings → Notifications.', '<button class="btn small" data-setup-install>Install helper</button><button class="btn small" data-setup-open="notifications">Open settings</button>') : ''}
-      ${wizardAlertRow('behavior.notifyBrowser', 'Desktop notifications', notifPerm === 'denied' ? 'Blocked in your browser, click “How to allow”' : 'Real macOS banners while Vantage is open', browserAction)}
-      ${wizardAlertRow('notifications.push', 'Web Push', 'Alerts even when the tab is closed', pushAction)}
-      ${wizardAlertRow('notifications.macos', 'Server alerts (legacy helper)', 'Often blocked on newer macOS, prefer Desktop or Web Push', '<button class="btn small" data-ob-test="macos">Test</button>')}
+      ${wizardAlertRow('behavior.notifyBrowser', 'Desktop notifications', browserReady ? 'Real banners while Vantage is open' : 'Granted permission needed, see the previous step', browserAction)}
+      ${wizardAlertRow('notifications.push', 'Web Push', pushSubs > 0 ? 'Alerts even when the tab is closed' : 'Enable it on the previous step for background alerts', pushAction)}
+      ${wizardAlertRow('notifications.macos', 'Server alerts (helper)', 'Posted by the Vantage helper, works with no tab open', '<button class="btn small" data-ob-test="macos">Test</button>')}
     </div>
-    <p class="settings-note" style="text-align:center;margin-top:14px">Desktop and Web Push banners come from your browser, allow them when prompted. Background alerts need the helper allowed in System Settings, and turn off <strong>Summarise notifications</strong> and Focus if banners still don’t appear.</p>`;
+    <p class="settings-note" style="text-align:center;margin-top:14px">If a test reports success but no banner appears, allow your browser in System Settings → Notifications and turn off Focus or Summarise notifications. The server helper path above is the most reliable on this Mac.</p>`;
+  }
+  if (step === 'permissions') {
+    const defs = browserPermissionDefs();
+    const pending = defs.filter((d) => d.state === 'not asked' || d.state === 'unknown').length;
+    return `<div class="wizard-cards">${defs.map(permissionCard).join('')}</div>
+    <p class="settings-note" style="text-align:center;margin-top:14px">${pending ? `${pending} still to decide. ` : ''}Nothing is requested until you click Grant, and you can change any of it later in Settings → Capabilities.</p>`;
+  }
+  if (step === 'system') {
+    const defs = macosPermissionDefs();
+    return `<div class="wizard-cards">${defs.map(permissionCard).join('')}</div>
+    <p class="settings-note" style="text-align:center;margin-top:14px">These open the exact System Settings pane. Nothing is enabled until you toggle it there, and Vantage never reads more than these tasks need.</p>`;
   }
   if (step === 'security') {
     const enabled = settingsState.data && settingsState.data.capabilityState.webauthn.enabled;
     const note = touchIdUsable() ? 'Uses Touch ID on this Mac; the server verifies each request.' : 'Available when opened via http://localhost.';
-    return `<div class="wizard-cards">
-      <div class="wizard-card">
-        <span class="wc-ico">${svg('fingerprint')}</span>
-        <div class="wc-main"><div class="wc-title">Touch ID for destructive actions</div><div class="wc-help">${esc(note)}</div></div>
-        <div class="wc-actions"><span class="wc-status" data-ob-status="touchid"></span><button class="btn small ${enabled ? '' : 'primary'}" data-ob-touchid="${enabled ? 'disable' : 'enable'}">${enabled ? 'Disable' : 'Enable'}</button></div>
-      </div>
-    </div>`;
+    const action = `<button class="btn small ${enabled ? '' : 'primary'}" data-ob-touchid="${enabled ? 'disable' : 'enable'}">${enabled ? 'Disable' : 'Enable'}</button>`;
+    return `<div class="wizard-cards">${wizardInfoCard({
+      id: 'touchid',
+      icon: 'fingerprint',
+      title: 'Touch ID for destructive actions',
+      body: `<div class="wc-help">${esc(note)}</div>`,
+      trailing: pill(enabled ? 'on' : 'off', enabled ? 'good' : ''),
+      action,
+    })}</div>`;
   }
   if (step === 'app') {
     const nativeRunning = Boolean(NATIVE);
     const nativeBuilt = Boolean(settingsState.data && settingsState.data.capabilityState && settingsState.data.capabilityState.native && settingsState.data.capabilityState.native.built);
     const webInstalled = Boolean((setupState.data && setupState.data.pwaInstalled) || isStandalone());
-    const nativeAction = nativeRunning
-      ? '<span class="wc-status ok">installed</span>'
-      : `<button class="btn small primary" data-ob-native>${nativeBuilt ? 'Open' : 'Build &amp; open'}</button>`;
-    const webAction = webInstalled
-      ? '<span class="wc-status ok">installed</span>'
-      : '<button class="btn small" data-ob-install>Install</button>';
+    const nativeAction = nativeRunning ? '' : `<button class="btn small primary" data-ob-native>${nativeBuilt ? 'Open' : 'Build &amp; open'}</button>`;
+    const webAction = webInstalled ? '' : '<button class="btn small" data-ob-install>Install</button>';
     return `<div class="wizard-cards">
-      <div class="wizard-card">
-        <span class="wc-ico">${svg('app')}</span>
-        <div class="wc-main"><div class="wc-title">Native Mac app ${pill('recommended', 'accent')}</div><div class="wc-help">A real Mac window with a Dock icon, menu-bar quick actions, and native notifications, save dialogs, clipboard and wake lock.</div></div>
-        <div class="wc-actions"><span class="wc-status" data-ob-status="native"></span>${nativeAction}</div>
-      </div>
-      <div class="wizard-card">
-        <span class="wc-ico">${svg('grid')}</span>
-        <div class="wc-main"><div class="wc-title">Install as a web app</div><div class="wc-help">Runs in your browser as an app window. Best if you prefer the browser, or want Web Push.</div></div>
-        <div class="wc-actions"><span class="wc-status" data-ob-status="webapp"></span>${webAction}</div>
-      </div>
+      ${wizardInfoCard({
+        id: 'native',
+        icon: 'app',
+        title: 'Native Mac app',
+        titleExtra: ` ${pill('recommended', 'accent')}`,
+        body: '<div class="wc-help">A real Mac window with a Dock icon, menu-bar quick actions, and native notifications, save dialogs, clipboard and wake lock.</div>',
+        trailing: nativeRunning ? pill('installed', 'good') : '',
+        action: nativeAction,
+      })}
+      ${wizardInfoCard({
+        id: 'webapp',
+        icon: 'grid',
+        title: 'Install as a web app',
+        body: '<div class="wc-help">Runs in your browser as an app window. Best if you prefer the browser, or want Web Push.</div>',
+        trailing: webInstalled ? pill('installed', 'good') : '',
+        action: webAction,
+      })}
     </div>
     <p class="settings-note" style="text-align:center;margin-top:16px">Same dashboard and the same local server either way, the native app adds macOS integration.</p>`;
   }
   if (step === 'finish') {
-    const s = setupState.data || {};
-    const notifOk = s.notifier === 'terminal-notifier';
+    const folders = (setupState.data && setupState.data.folders) || [];
+    const stateOf = (id) => (setupState.folders && setupState.folders[id]) || 'not asked';
+    const rows = folders.map((f) => {
+      const state = stateOf(f.id);
+      const [label, kind] = PERM_STATE[state] || [state, ''];
+      const done = state === 'granted' || state === 'missing';
+      const actions = done ? '' : `<button class="btn small" data-ob-folder="${esc(f.id)}">Grant</button>`;
+      const icon = `<img class="folder-ico" data-folder="${esc(f.id)}" loading="lazy" decoding="async" alt="" src="/api/folder/icon?id=${esc(f.id)}&size=64" />`;
+      return row({ title: esc(f.label), icon, badge: pill(label, kind), actions, search: f.label });
+    }).join('');
+    const pending = folders.filter((f) => {
+      const state = stateOf(f.id);
+      return state !== 'granted' && state !== 'missing';
+    }).length;
     return `<div class="wizard-cards">
-      ${onboardingSetupRow(notifOk, 'macOS notifications', notifOk ? 'Ready, banners will appear reliably.' : 'Install the helper, or allow “Script Editor” in Settings.', notifOk ? '' : '<button class="btn small primary" data-setup-install>Install helper</button><button class="btn small" data-setup-open="notifications">Open settings</button>')}
-      ${onboardingSetupRow(s.fullDiskAccess === true, 'Full Disk Access', s.fullDiskAccess === true ? 'Granted, disk totals are complete.' : 'Optional, for complete disk totals. Grant it to node in Settings.', s.fullDiskAccess === true ? '' : '<button class="btn small" data-setup-open="fda">Open settings</button>')}
-      ${onboardingSetupRow(Boolean(s.launchdLoaded), 'Launch at login', s.launchdLoaded ? 'Running as a login service.' : 'Not installed, Vantage may not start automatically.', s.launchdLoaded ? '' : '<button class="btn small" data-setup-open="login">Open settings</button>')}
+      ${wizardInfoCard({
+        id: 'folders',
+        icon: 'disk',
+        title: 'Folder access',
+        body: `<div class="wc-help">macOS protects your home folders. Grant the ones you want measured, and Vantage reads each once for a complete disk breakdown.</div>
+          <div class="wc-help dim">Safe to grant: the scan runs on this Mac and stays here. File contents are never uploaded.</div>`,
+        action: pending > 1 ? '<button class="btn small" data-ob-folder-all>Grant all</button>' : '',
+      })}
+      ${card(`<div class="rows">${rows || '<div class="empty-note">Nothing to measure</div>'}</div>`)}
     </div>
-    <div class="settings-inline" style="justify-content:center;margin-top:14px"><button class="btn small" data-setup-recheck>Re-check</button></div>`;
-  }
-  if (step === 'ready') {
-    const enabled = settingsState.data && settingsState.data.capabilityState.webauthn.enabled;
-    const pushSubs = state.push ? state.push.subscriptions : 0;
-    const chips = [
-      { label: 'Appearance set', ok: true },
-      { label: enabled ? 'Touch ID on' : 'Touch ID off', ok: enabled },
-      { label: pushSubs > 0 ? 'Web Push on' : 'Web Push off', ok: pushSubs > 0 },
-    ];
-    return `<div class="wizard-stack">${chips.map((c) => `<span class="wizard-chip${c.ok ? '' : ' muted'}">${svg(c.ok ? 'check' : 'xmark')}${esc(c.label)}</span>`).join('')}</div>
-      <p class="settings-note" style="text-align:center;margin-top:20px">Press <kbd class="kbd">⌘K</kbd> for the command palette · <kbd class="kbd">?</kbd> for shortcuts.</p>`;
+    <p class="settings-note" style="text-align:center;margin-top:14px">Press <strong>Open dashboard</strong> when you’re ready; the full scan runs then. You can change any of this later in Settings → Capabilities.</p>`;
   }
   return '';
 }
@@ -7879,8 +8309,13 @@ function ensureWizardShell() {
     <div class="wizard" role="dialog" aria-modal="true" aria-label="Vantage setup">
       <div class="wizard-progress"><div class="bar"></div></div>
       <div class="wizard-step-label"></div>
-      <div class="wizard-body"></div>
-      <div class="wizard-actions"><div class="left"></div><div class="right"></div></div>
+      <div class="wizard-cols">
+        <aside class="wizard-head"></aside>
+        <section class="wizard-main">
+          <div class="wizard-body"></div>
+          <div class="wizard-actions"><div class="left"></div><div class="right"></div></div>
+        </section>
+      </div>
     </div>`;
   return els.onboardingRoot.querySelector('.wizard');
 }
@@ -7901,16 +8336,60 @@ function renderOnboarding(direction = 'none') {
   shell.querySelector('.wizard-progress .bar').style.width = `${pct}%`;
   shell.querySelector('.wizard-step-label').textContent = `Step ${onboardingState.step + 1} of ${sequence.length}`;
 
+  // The icon/title/subtitle live in a fixed header so they never move between
+  // steps; only the body below them changes and flows underneath.
+  const head = shell.querySelector('.wizard-head');
+  head.innerHTML = `<div class="wizard-icon">${svg(meta.icon)}</div><h2>${esc(meta.title)}</h2><p class="lede">${esc(meta.lede)}</p>`;
+  head.classList.remove('enter-forward', 'enter-back');
+  if (direction !== 'none') {
+    void head.offsetWidth;
+    head.classList.add(direction === 'forward' ? 'enter-forward' : 'enter-back');
+  }
+
   const directionClass = direction === 'forward' ? ' from-right' : direction === 'back' ? ' from-left' : '';
   const stepEl = document.createElement('div');
   stepEl.className = `wizard-step${directionClass}`;
-  stepEl.innerHTML = `<div class="wizard-icon">${svg(meta.icon)}</div><h2>${esc(meta.title)}</h2><p class="lede">${esc(meta.lede)}</p>${onboardingStepBody(step)}`;
+  stepEl.innerHTML = onboardingStepBody(step);
   shell.querySelector('.wizard-body').replaceChildren(stepEl);
 
-  shell.querySelector('.wizard-actions .left').innerHTML = onboardingState.step > 0 ? '<button class="btn small" data-ob-back>Back</button>' : '';
-  shell.querySelector('.wizard-actions .right').innerHTML = `${step !== 'ready' ? '<button class="wizard-skip" data-ob-skip>Skip setup</button>' : ''}<button class="btn primary" data-ob-next>${step === 'ready' ? 'Open dashboard' : 'Continue'}</button>`;
+  renderWizardActions(shell, step);
 
-  if ((step === 'alerts' || step === 'finish' || step === 'app') && !setupState.data && !setupState.loading) loadSetup();
+  if ((step === 'permissions' || step === 'alerts' || step === 'system' || step === 'finish' || step === 'app') && !setupState.data && !setupState.loading) loadSetup();
+}
+
+// The action bar updates in place (button elements are reused) so it never
+// animates or flickers as steps change.
+function renderWizardActions(shell, step) {
+  const left = shell.querySelector('.wizard-actions .left');
+  const right = shell.querySelector('.wizard-actions .right');
+  const isLast = onboardingState.step >= ONBOARDING_SEQUENCE.length - 1;
+
+  if (onboardingState.step > 0) {
+    if (!left.querySelector('[data-ob-back]')) left.innerHTML = '<button class="btn small" data-ob-back>Back</button>';
+  } else if (left.firstChild) {
+    left.innerHTML = '';
+  }
+
+  const showSkip = !isLast;
+  let skip = right.querySelector('[data-ob-skip]');
+  if (showSkip && !skip) {
+    skip = document.createElement('button');
+    skip.className = 'wizard-skip';
+    skip.setAttribute('data-ob-skip', '');
+    skip.textContent = 'Skip setup';
+    right.prepend(skip);
+  } else if (!showSkip && skip) {
+    skip.remove();
+  }
+
+  let next = right.querySelector('[data-ob-next]');
+  if (!next) {
+    next = document.createElement('button');
+    next.className = 'btn primary';
+    next.setAttribute('data-ob-next', '');
+    right.appendChild(next);
+  }
+  next.textContent = isLast ? 'Open dashboard' : 'Continue';
 }
 
 async function loadOnboardingContext() {
@@ -7980,6 +8459,9 @@ async function onboardingNext() {
     await persistOnboarding({ completedAt: new Date().toISOString(), currentStep: ONBOARDING_SEQUENCE.length - 1 });
     closeOnboarding();
     toast('Vantage is ready', 'good');
+    // Completing setup kicks off a full scan server-side; poll so the dashboard
+    // picks it up instead of showing the quick first-run numbers.
+    loadInventory();
     return;
   }
   onboardingState.step += 1;
@@ -8045,10 +8527,43 @@ if (els.onboardingRoot) {
     const statusFor = (el) => el.closest('.wizard-card') && el.closest('.wizard-card').querySelector('[data-ob-status]');
     const testBrowser = event.target.closest('[data-ob-test-browser]');
     if (testBrowser) {
-      withButtonState(testBrowser, async () => { await previewBrowserNotification(); setStatusEl(statusFor(testBrowser), 'shown ✓', 'ok'); }, { toast: false });
+      withButtonState(testBrowser, async () => {
+        const shown = await previewBrowserNotification();
+        setStatusEl(statusFor(testBrowser), shown ? 'browser banner sent' : 'sent, but the browser reported nothing', shown ? 'ok' : 'bad');
+      }, { toast: false });
       return;
     }
     if (event.target.closest('[data-ob-notify-help]')) { showNotifyHelp(); return; }
+    const permBtn = event.target.closest('[data-perm]');
+    if (permBtn) {
+      withButtonState(permBtn, () => handlePermissionAction(permBtn.getAttribute('data-perm'), statusFor(permBtn)), { toast: false });
+      return;
+    }
+    const folderBtn = event.target.closest('[data-ob-folder]');
+    if (folderBtn) {
+      const id = folderBtn.getAttribute('data-ob-folder');
+      withButtonState(folderBtn, async () => {
+        const res = await api('/api/setup/folder-access', { method: 'POST', body: { id } });
+        setupState.folders = setupState.folders || {};
+        setupState.folders[id] = res.granted === true ? 'granted' : res.missing ? 'missing' : 'denied';
+        if (els.onboardingRoot.classList.contains('open')) renderOnboarding('none');
+      }, { toast: false });
+      return;
+    }
+    const folderAll = event.target.closest('[data-ob-folder-all]');
+    if (folderAll) {
+      withButtonState(folderAll, async () => {
+        setupState.folders = setupState.folders || {};
+        for (const f of ((setupState.data && setupState.data.folders) || [])) {
+          const current = setupState.folders[f.id];
+          if (current === 'granted' || current === 'missing') continue;
+          const res = await api('/api/setup/folder-access', { method: 'POST', body: { id: f.id } }).catch(() => null);
+          if (res) setupState.folders[f.id] = res.granted === true ? 'granted' : res.missing ? 'missing' : 'denied';
+          if (els.onboardingRoot.classList.contains('open')) renderOnboarding('none');
+        }
+      }, { toast: false });
+      return;
+    }
     const touch = event.target.closest('[data-ob-touchid]');
     if (touch) {
       const enabling = touch.getAttribute('data-ob-touchid') === 'enable';
@@ -8122,9 +8637,29 @@ document.addEventListener('keydown', (event) => {
 
 // --- boot ------------------------------------------------------------------
 
+// Asks the server which icon ids it has as real SF Symbols, then re-renders so
+// the whole UI swaps from the built-in line icons to the system symbols.
+async function loadSymbols() {
+  try {
+    const data = await fetch('/api/symbols', { cache: 'no-store' }).then((r) => r.json());
+    const icons = Array.isArray(data.icons) ? data.icons : [];
+    if (!icons.length) return;
+    const next = new Set(icons);
+    const version = data.version || '';
+    if (sfIcons && version === sfVersion && next.size === sfIcons.size && [...next].every((n) => sfIcons.has(n))) return;
+    sfIcons = next;
+    sfVersion = version;
+    sfMasks = data.masks || null;
+    render();
+  } catch {
+    /* keep the built-in line icons */
+  }
+}
+
 (async function init() {
   if (typeof location !== 'undefined' && location.search && location.search.includes('app=1') && document.body) document.body.classList.add('native-app');
   applyPrefs();
+  loadSymbols();
   api('/api/system').then((s) => {
     if (s && s.accent) {
       systemAccent = s.accent;
