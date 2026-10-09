@@ -2123,7 +2123,7 @@ function showProcessDetail(p) {
   <div class="pad"><div class="faint mono" style="font-size:11px;white-space:pre-wrap">${esc(p.command || '')}</div></div>`;
   const actions = state.session.readOnly
     ? ''
-    : `<button class="btn small danger" data-act="process.kill" data-params='${esc(JSON.stringify({ pid: p.pid, name: p.name }))}'>Quit…</button><button class="btn small" data-copy="${esc(p.command || '')}">Copy command</button>`;
+    : `<button class="btn small danger" data-act="process.kill" data-params='${esc(JSON.stringify({ pid: p.pid, name: p.name, label: classification.label }))}'${service ? ` data-impact="Managed by launchd (${esc(service.friendly || service.label)}), so it will restart automatically."` : ''}>Quit…</button><button class="btn small" data-copy="${esc(p.command || '')}">Copy command</button>`;
   openPanel({ title: classification.label, subtitle: `pid ${p.pid}`, body, actions });
 }
 
@@ -2191,7 +2191,7 @@ function monitorBody(sample, samples) {
         title: `${esc(classification.label)}<span class="faint mono" style="margin-left:8px">${p.pid}</span>`,
         sub: esc(sub),
         size: `${fmtBytes(p.rss)}${p.cpu != null ? `<div class="model-when faint">${p.cpu.toFixed(1)}% CPU</div>` : ''}`,
-        actions: `<button class="btn small icon" data-proc='${esc(JSON.stringify(p))}' title="Details">${svg('shield')}</button>${actBtn('process.kill', { pid: p.pid, name: p.name }, 'Quit…', 'danger')}`,
+        actions: `<button class="btn small icon" data-proc='${esc(JSON.stringify(p))}' title="Details">${svg('shield')}</button>${actBtn('process.kill', { pid: p.pid, name: p.name, label: classification.label }, 'Quit…', 'danger', service ? { impact: `Managed by launchd (${service.friendly || service.label}), so it will restart automatically.` } : {})}`,
         search: p.command || p.name,
         icon: procIcon(p, classification),
       });
