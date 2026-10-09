@@ -1942,6 +1942,7 @@ const MONITOR_RANGES = [
 ];
 let monitorRange = 60;
 let monitorTimer = null;
+let procTimer = null;
 
 function viewMonitor() {
   return `<div id="monitor-root">${skeletonRows(4)}</div>`;
@@ -2127,6 +2128,24 @@ function showProcessDetail(p) {
   openPanel({ title: classification.label, subtitle: `pid ${p.pid}`, body, actions });
 }
 
+function procRowsHtml(procs, managed) {
+  return (procs || [])
+    .map((p) => {
+      const classification = classifyProcess(p);
+      const service = managed.get(p.pid);
+      const sub = [service ? `launchd: ${service.friendly || service.label}` : null, classification.why, classification.affects ? `Quitting → ${classification.affects}` : null].filter(Boolean).join(' · ');
+      return row({
+        title: `${esc(classification.label)}<span class="faint mono" style="margin-left:8px">${p.pid}</span>`,
+        sub: esc(sub),
+        size: `${fmtBytes(p.rss)}${p.cpu != null ? `<div class="model-when faint">${p.cpu.toFixed(1)}% CPU</div>` : ''}`,
+        actions: `<button class="btn small icon" data-proc='${esc(JSON.stringify(p))}' title="Details">${svg('shield')}</button>${actBtn('process.kill', { pid: p.pid, name: p.name, label: classification.label }, 'Quit…', 'danger', service ? { impact: `Managed by launchd (${service.friendly || service.label}), so it will restart automatically.` } : {})}`,
+        search: p.command || p.name,
+        icon: procIcon(p, classification),
+      });
+    })
+    .join('');
+}
+
 function monitorBody(sample, samples) {
   if (!sample) return '<div class="empty-note">Collecting the first sample…</div>';
 
@@ -2182,21 +2201,7 @@ function monitorBody(sample, samples) {
     ${chartCard('Ollama in memory', samples.map((s) => s.ollamaBytes || 0), { max: total, color: '#0a84ff', format: fmtBytes })}
   </div>`;
 
-  const procs = (sample.procs || [])
-    .map((p) => {
-      const classification = classifyProcess(p);
-      const service = managed.get(p.pid);
-      const sub = [service ? `launchd: ${service.friendly || service.label}` : null, classification.why, classification.affects ? `Quitting → ${classification.affects}` : null].filter(Boolean).join(' · ');
-      return row({
-        title: `${esc(classification.label)}<span class="faint mono" style="margin-left:8px">${p.pid}</span>`,
-        sub: esc(sub),
-        size: `${fmtBytes(p.rss)}${p.cpu != null ? `<div class="model-when faint">${p.cpu.toFixed(1)}% CPU</div>` : ''}`,
-        actions: `<button class="btn small icon" data-proc='${esc(JSON.stringify(p))}' title="Details">${svg('shield')}</button>${actBtn('process.kill', { pid: p.pid, name: p.name, label: classification.label }, 'Quit…', 'danger', service ? { impact: `Managed by launchd (${service.friendly || service.label}), so it will restart automatically.` } : {})}`,
-        search: p.command || p.name,
-        icon: procIcon(p, classification),
-      });
-    })
-    .join('');
+  const procs = procRowsHtml(sample.procs || [], managed);
 
   const explain = [
     ['Wired', 'Kernel + GPU/model weights, loaded Ollama models live here.'],
@@ -2210,7 +2215,7 @@ function monitorBody(sample, samples) {
     `<div class="grid stats">${tiles}</div>`,
     group('Unified memory', `${fmtBytes(sample.mem.used)} used of ${fmtBytes(total)}${pressure} · up ${fmtUptime(sample.uptimeSeconds)}`, card(`<div class="pad"><div class="stacked">${stacked}</div><div class="legend">${legend}</div>${explainList}</div>`)),
     `<div class="group"><div class="group-head"><div class="group-title">Trends</div>${rangeBar}</div>${charts}</div>`,
-    group('Top processes', 'what is using memory and why', card(`<div class="rows">${procs || '<div class="empty-note">No processes above the threshold</div>'}</div>`)),
+    group('Top processes', 'what is using memory and why', card(`<div class="rows" id="proc-rows">${procs || '<div class="empty-note">No processes above the threshold</div>'}</div>`)),
   ].join('');
 }
 
@@ -2343,6 +2348,18 @@ function diskTrendBody(series) {
   return `<div class="spark">${areaChart(free, { height: 56, color: '#4cc2c4' })}</div><div class="disk-projection">${projection}</div>`;
 }
 
+async function refreshProcRows() {
+  if (state.view !== 'monitor') return;
+  const host = document.getElementById('proc-rows');
+  if (!host) return;
+  try {
+    const data = await fetch('/api/processes', { cache: 'no-store' }).then((r) => r.json());
+    host.innerHTML = procRowsHtml(data.procs || [], managedServices(state.data)) || '<div class="empty-note">No processes above the threshold</div>';
+  } catch {
+    /* keep the last list */
+  }
+}
+
 async function loadMonitor() {
   if (state.idle) return;
   if (state.view !== 'monitor') {
@@ -2353,10 +2370,11 @@ async function loadMonitor() {
   if (!host) return;
   try {
     const [live, series] = await Promise.all([
-      fetch('/api/metrics/live', { cache: 'no-store' }).then((r) => r.json()),
+      fetch('/api/metrics/live?fresh=1', { cache: 'no-store' }).then((r) => r.json()),
       fetch(`/api/metrics/series?minutes=${monitorRange}`, { cache: 'no-store' }).then((r) => r.json()),
     ]);
     host.innerHTML = monitorBody(live.sample, series.samples || []);
+    refreshProcRows();
   } catch {
     host.innerHTML = '<div class="empty-note">Metrics unavailable</div>';
   }
@@ -2366,12 +2384,17 @@ function startMonitorPolling() {
   stopMonitorPolling();
   loadMonitor();
   monitorTimer = setInterval(loadMonitor, 3000);
+  procTimer = setInterval(refreshProcRows, 2000);
 }
 
 function stopMonitorPolling() {
   if (monitorTimer) {
     clearInterval(monitorTimer);
     monitorTimer = null;
+  }
+  if (procTimer) {
+    clearInterval(procTimer);
+    procTimer = null;
   }
 }
 
@@ -4400,7 +4423,7 @@ function renderView() {
   resetRowCursor();
   els.viewTitle.textContent = view.title;
   els.viewSub.textContent = view.id === 'monitor'
-    ? 'Live · refresh every 3s'
+    ? 'Live · processes every 2s'
     : view.id === 'network'
       ? 'Live · refresh every 5s'
       : data?.generatedAt

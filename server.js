@@ -423,7 +423,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/metrics/live') {
-      return sendJson(res, 200, { sample: metrics.getLatest(), intervalMs: metrics.intervalMs });
+      const fresh = url.searchParams.get('fresh') === '1';
+      const sample = fresh ? await metrics.collectSample() : metrics.getLatest();
+      return sendJson(res, 200, { sample, intervalMs: metrics.intervalMs });
+    }
+
+    if (pathname === '/api/processes') {
+      return sendJson(res, 200, { procs: await metrics.processSample(), at: Date.now() });
     }
 
     if (pathname === '/api/metrics/series') {
