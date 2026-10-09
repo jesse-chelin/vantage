@@ -11,6 +11,7 @@ This file is generated from the git history. Refresh it with `npm run changelog`
 
 ### Other
 
+- Redesign overview stat tiles with charts and richer detail ([f7fd613](https://github.com/jesse-chelin/vantage/commit/f7fd613))
 - Auto-rebuild the native app when its sources change during an update ([066d694](https://github.com/jesse-chelin/vantage/commit/066d694))
 - Onboarding redesign, native macOS assets, and reset tooling ([17ba917](https://github.com/jesse-chelin/vantage/commit/17ba917))
 
