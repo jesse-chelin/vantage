@@ -264,7 +264,42 @@ function row({ title, sub, size, actions, search, attrs, clickable, icon, badge 
 }
 
 function statTile(s) {
-  return `<div class="card stat">${s.icon ? `<span class="stat-ico">${svg(s.icon)}</span>` : ''}<span class="value ${String(s.value).length > 8 ? 'small' : ''}">${esc(s.value)}</span><span class="label">${esc(s.label)}</span>${s.hint ? `<span class="hint">${esc(s.hint)}</span>` : ''}</div>`;
+  const value = String(s.value);
+  return `<div class="card stat">
+    <div class="stat-head">
+      <span class="stat-ico">${svg(s.icon)}</span>
+      <span class="stat-label">${esc(s.label)}</span>
+      ${s.badge ? `<span class="stat-badge">${s.badge}</span>` : ''}
+    </div>
+    <span class="value${value.length > 8 ? ' small' : ''}">${esc(s.value)}</span>
+    ${s.hint ? `<span class="hint">${esc(s.hint)}</span>` : ''}
+    ${s.viz ? `<span class="stat-viz">${s.viz}</span>` : ''}
+  </div>`;
+}
+
+// A slim usage meter. pct is 0..100.
+function statMeter(pct, color) {
+  const clamped = Math.min(100, Math.max(0, Number(pct) || 0));
+  return `<span class="stat-meter"><span style="width:${clamped.toFixed(1)}%;background:${color}"></span></span>`;
+}
+
+// A segmented bar, e.g. running vs stopped.
+function statSegments(segments) {
+  const total = segments.reduce((sum, s) => sum + (s.value || 0), 0) || 1;
+  return `<span class="stat-seg">${segments
+    .filter((s) => (s.value || 0) > 0)
+    .map((s) => `<span style="width:${((s.value / total) * 100).toFixed(2)}%;background:${s.color}" title="${esc(s.label)}: ${esc(fmtNum(s.value))}"></span>`)
+    .join('')}</span>`;
+}
+
+// A tiny bar chart for a handful of values (largest first).
+function statBars(values) {
+  const list = (values || []).filter((v) => v > 0);
+  if (!list.length) return '';
+  const max = Math.max(...list) || 1;
+  return `<span class="sparkbars">${list
+    .map((v) => `<span style="height:${Math.max(12, Math.round((v / max) * 100))}%" title="${esc(fmtBytes(v))}"></span>`)
+    .join('')}</span>`;
 }
 
 function actBtn(id, params, label, variant = '', opts = {}) {
@@ -642,6 +677,7 @@ function applyDevSim() {
 // --- view renderers --------------------------------------------------------
 
 const CATEGORY_COLORS = { ollama: '#0a84ff', image: '#ff2d55', speech: '#30b0c7', agent: '#ff9500' };
+const CATEGORY_SHORT = { ollama: 'Ollama', image: 'Images', speech: 'Speech', agent: 'Agent' };
 
 function viewOverview(data) {
   const system = data.system || {};
@@ -652,20 +688,47 @@ function viewOverview(data) {
   const svcContext = data.services?.services || [];
   const stoppedServices = svcContext.filter((s) => !s.running).length;
 
+  const categories = (summary.categories || []).filter((c) => c.bytes > 0);
+  const total = categories.reduce((sum, c) => sum + c.bytes, 0) || 1;
+  const topModels = (ollama.models || ollama.diskModels || [])
+    .map((m) => m.sizeBytes || m.bytes || 0)
+    .sort((a, b) => b - a)
+    .slice(0, 7);
+  const runningServices = svcContext.filter((s) => s.running).length;
+  const casks = (data.homebrew && data.homebrew.casks) || [];
+
   const stats = [
-    ollama.installed ? { value: fmtBytes(summary.aiFootprintBytes), label: 'AI footprint', icon: 'layers' } : null,
-    ollama.installed ? { value: fmtNum(summary.counts?.ollamaModels), label: 'Ollama models', hint: `${fmtBytes(ollama.totalBytes)} on disk`, icon: 'brain' } : null,
-    comfy.installed ? { value: fmtNum(summary.counts?.comfyCheckpoints), label: 'Image checkpoints', hint: `${fmtBytes(comfy.modelsTotalBytes)} of models`, icon: 'photo' } : null,
-    { value: fmtBytes(disk.freeBytes), label: 'Free disk space', hint: `${fmtBytes(disk.usedBytes)} used`, icon: 'disk' },
-    { value: fmtNum(summary.counts?.services), label: 'Services running', hint: stoppedServices ? `${stoppedServices} stopped` : `${svcContext.length} total`, icon: 'gears' },
-    (data.homebrew && !data.homebrew.error) ? { value: fmtNum(summary.counts?.brewPackages), label: 'Homebrew formulae', icon: 'mug' } : null,
+    ollama.installed ? {
+      icon: 'layers', label: 'AI footprint', value: fmtBytes(summary.aiFootprintBytes),
+      hint: categories.length ? categories.map((c) => `${CATEGORY_SHORT[c.key] || c.name} ${fmtBytes(c.bytes)}`).join(' · ') : 'nothing measured yet',
+      viz: categories.length ? `<span class="stacked stat-stacked">${categories.map((c) => `<span style="width:${(c.bytes / total) * 100}%;background:${CATEGORY_COLORS[c.key] || 'var(--accent)'}" title="${esc(c.name)}"></span>`).join('')}</span>` : '',
+    } : null,
+    ollama.installed ? {
+      icon: 'brain', label: 'Ollama models', value: fmtNum(summary.counts?.ollamaModels),
+      hint: `${fmtBytes(ollama.totalBytes)} on disk${summary.counts?.ollamaLoaded ? ` · ${fmtNum(summary.counts.ollamaLoaded)} loaded` : ''}`,
+      viz: statBars(topModels),
+    } : null,
+    comfy.installed ? { icon: 'photo', label: 'Image checkpoints', value: fmtNum(summary.counts?.comfyCheckpoints), hint: `${fmtBytes(comfy.modelsTotalBytes)} of models`, viz: statBars((comfy.checkpoints || []).map((c) => c.bytes || 0)) } : null,
+    {
+      icon: 'disk', label: 'Free disk space', value: fmtBytes(disk.freeBytes),
+      hint: `${fmtBytes(disk.usedBytes)} used · ${disk.usedPercent}% of ${fmtBytes(disk.totalBytes)}`,
+      viz: statMeter(disk.usedPercent, disk.usedPercent > 90 ? 'var(--red)' : disk.usedPercent > 75 ? 'var(--orange)' : 'var(--green)'),
+    },
+    {
+      icon: 'gears', label: 'Services running', value: fmtNum(summary.counts?.services),
+      hint: `${stoppedServices} stopped · ${svcContext.length} total`,
+      viz: statSegments([{ value: runningServices, color: 'var(--green)', label: 'Running' }, { value: stoppedServices, color: 'var(--orange)', label: 'Stopped' }]),
+    },
+    (data.homebrew && !data.homebrew.error) ? {
+      icon: 'mug', label: 'Homebrew formulae', value: fmtNum(summary.counts?.brewPackages),
+      hint: casks.length ? `${fmtNum(casks.length)} casks` : 'formulae installed',
+      viz: statSegments([{ value: summary.counts?.brewPackages || 0, color: 'var(--accent)', label: 'Formulae' }, { value: casks.length, color: 'var(--text-3)', label: 'Casks' }]),
+    } : null,
   ]
     .filter(Boolean)
     .map(statTile)
     .join('');
 
-  const categories = (summary.categories || []).filter((c) => c.bytes > 0);
-  const total = categories.reduce((sum, c) => sum + c.bytes, 0) || 1;
   const stacked = categories.map((c) => `<span style="width:${(c.bytes / total) * 100}%;background:${CATEGORY_COLORS[c.key]}"></span>`).join('');
   const legend = categories
     .map((c) => `<span class="item"><span class="dot" style="background:${CATEGORY_COLORS[c.key]}"></span>${esc(c.name)} · ${fmtBytes(c.bytes)}${c.count != null ? ` (${c.count})` : ''}</span>`)

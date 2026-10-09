@@ -372,7 +372,7 @@ body.compact .card.pad, body.compact .pad { padding: 10px 12px; }
 body.compact .chip { padding: 1px 7px; }
 body.compact .nav-item { padding-top: 5px; padding-bottom: 5px; }
 body.compact .settings-row { padding: 8px 14px; }
-body.compact .stat { padding: 10px 12px; }
+body.compact .stat { padding: 10px 12px; min-height: 112px; }
 
 body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after {
   animation-duration: 0.001ms !important;
@@ -450,18 +450,29 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
 .card.pad, .pad { padding: 16px 18px; }
 
 .grid { display: grid; gap: 12px; }
-.grid.stats { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 20px; }
+.grid.stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+.grid.stats .stat { flex: 1 1 224px; }
 .grid.two { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-@media (max-width: 920px) { .grid.stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 560px) { .grid.stats { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .grid.stats .stat { flex-basis: 100%; } }
 
 /* Stat tiles -------------------------------------------------------------- */
 
-.stat { display: flex; flex-direction: column; gap: 3px; justify-content: flex-start; padding: 14px 16px; min-height: 84px; }
-.stat .label { order: -1; font-size: 11.5px; font-weight: 500; color: var(--text-3); }
-.stat .value { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
-.stat .value.small { font-size: 17px; }
-.stat .hint { font-size: 11px; color: var(--text-3); }
+.stat { display: flex; flex-direction: column; padding: 14px 16px; min-height: 128px; }
+.stat-head { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
+.stat-label { font-size: 11.5px; font-weight: 500; color: var(--text-3); }
+.stat-badge { margin-left: auto; }
+.stat .value { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+.stat .value.small { font-size: 18px; }
+.stat .hint { margin-top: 3px; font-size: 11px; color: var(--text-3); }
+.stat-viz { display: block; margin-top: auto; padding-top: 12px; }
+.stat-meter { display: block; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.stat-meter > span { display: block; height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+.stat-seg { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--surface-3); gap: 2px; }
+.stat-seg > span { display: block; height: 100%; border-radius: 999px; }
+.stat-stacked { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--surface-3); }
+.stat-stacked > span { display: block; height: 100%; }
+.sparkbars { display: flex; align-items: flex-end; gap: 4px; height: 30px; }
+.sparkbars > span { flex: 1; min-height: 3px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 55%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
 
 /* Rows -------------------------------------------------------------------- */
 
@@ -1087,7 +1098,7 @@ body.nav-open .nav-scrim { opacity: 1; visibility: visible; }
 .sf-symbol { display: inline-block; background-color: currentColor; vertical-align: -0.15em; flex: none; }
 .row-ico-svg { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-3); }
 .row-ico-svg svg { width: 13px; height: 13px; }
-.stat-ico { order: -2; align-self: flex-start; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--border); color: var(--accent-2); margin-bottom: 9px; }
+.stat-ico { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--border); color: var(--accent-2); flex: none; }
 .stat-ico svg { width: 15px; height: 15px; }
 .td-ico { display: inline-grid; place-items: center; vertical-align: -2px; color: var(--text-3); margin-right: 6px; }
 .td-ico svg { width: 13px; height: 13px; }
