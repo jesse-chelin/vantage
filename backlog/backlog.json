@@ -1,0 +1,521 @@
+{
+  "version": 1,
+  "updated": "2026-10-09",
+  "source": "reports/audit-2026-10-09.md",
+  "priorities": ["critical", "high", "medium", "low"],
+  "statuses": ["ready", "in-progress", "blocked", "done", "wontfix"],
+  "tasks": [
+    {
+      "id": "0001",
+      "title": "Validate Host and block cross-site requests",
+      "severity": "critical",
+      "area": "security",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["server.js"],
+      "source": "audit S1",
+      "summary": "The dashboard token is returned by an unauthenticated /api/session and is protected only by an Origin-vs-Host check that DNS rebinding defeats.",
+      "steps": [
+        "Reject any request whose Host is not localhost, 127.0.0.1, [::1], or the configured HOST.",
+        "Reject requests with Sec-Fetch-Site: cross-site.",
+        "Stop deriving the expected origin from req.headers.host; compare against the fixed allowlist.",
+        "Review /api/session: keep the loopback bootstrap, but do not hand the token to a non-allowlisted host."
+      ],
+      "acceptance": [
+        "A request with Host: evil.example is rejected with 403 before any route runs.",
+        "Sec-Fetch-Site: cross-site is rejected.",
+        "Legitimate localhost/127.0.0.1 requests are unaffected."
+      ],
+      "tests": ["Add test/host-guard.test.js covering allowed and rejected hosts."]
+    },
+    {
+      "id": "0002",
+      "title": "Enforce Touch ID at runAction, not just the HTTP route",
+      "severity": "high",
+      "area": "security",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["lib/actions.js", "server.js"],
+      "source": "audit S4",
+      "summary": "The grant check lives only in POST /api/actions/:id, so rules and schedule fire danger:high actions with no grant.",
+      "steps": [
+        "Move the Touch ID verification into runAction (or a wrapper every caller uses).",
+        "Pass the grant through from rules/schedule, or forbid danger:high actions in those configs.",
+        "Keep the HTTP-layer check as defence in depth."
+      ],
+      "acceptance": [
+        "A danger:high action invoked via schedule without a grant is refused.",
+        "Interactive high actions still pass with a valid grant."
+      ],
+      "tests": ["Add a test that runAction('trash.empty') without a grant is refused."]
+    },
+    {
+      "id": "0003",
+      "title": "Path-validate maintenance.loginItem and constrain uploads",
+      "severity": "high",
+      "area": "security",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["lib/maintenance.js", "lib/actions.js", "server.js"],
+      "source": "audit S2",
+      "summary": "A traversal in loginItem plus /api/upload turns the token into arbitrary code execution via launchctl bootstrap.",
+      "steps": [
+        "Reject any login-item name that is not a single segment directly inside ~/Library/LaunchAgents.",
+        "Assert dirname(resolved) === LA_DIR before existence/bootstrap.",
+        "Constrain what /api/upload may store and how it can be referenced."
+      ],
+      "acceptance": [
+        "name: '../../x' and absolute paths are rejected.",
+        "A plist outside ~/Library/LaunchAgents cannot be bootstrapped."
+      ],
+      "tests": ["Add unit test for the loginItem name guard."]
+    },
+    {
+      "id": "0004",
+      "title": "Gate native Touch ID credential enrollment",
+      "severity": "high",
+      "area": "security",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["server.js", "lib/webauthn.js"],
+      "source": "audit S3",
+      "summary": "native/register accepts any token-supplied public key, so a token holder can mint the second factor.",
+      "steps": [
+        "Require a server-issued registration challenge plus an existing-credential assertion before enrolling a native key.",
+        "Or require a one-time bootstrap secret that only the local native app can obtain.",
+        "Never let a plain token add a credential."
+      ],
+      "acceptance": [
+        "native/register without a valid ceremony is rejected.",
+        "Enrolling the first credential on a fresh install still works."
+      ],
+      "tests": ["Add test that token-only native/register is refused."]
+    },
+    {
+      "id": "0005",
+      "title": "Fix unhandled stream errors that can crash the server",
+      "severity": "high",
+      "area": "bug",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["server.js"],
+      "source": "audit B1",
+      "summary": "createReadStream(...).pipe(res) has no error handler on the source; a file vanishing between stat and open throws an uncaught exception.",
+      "steps": [
+        "Use stream.pipeline for static and image/icon/gallery responses.",
+        "Or attach an 'error' handler that ends/destroys the response."
+      ],
+      "acceptance": [
+        "A read error on a served file does not exit the process.",
+        "The request fails cleanly (404/500) instead of crashing."
+      ],
+      "tests": ["Add a test simulating an unreadable file path."]
+    },
+    {
+      "id": "0006",
+      "title": "First-run wizard: real Skip, dismiss, focus trap, no double-submit",
+      "severity": "high",
+      "area": "onboarding",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js", "public/styles.css", "public/index.html"],
+      "source": "audit O1, U1, U7, U8, O11",
+      "summary": "The wizard cannot be dismissed, Skip setup just advances a step, there is no focus trap or Escape, and rapid clicks double-submit.",
+      "steps": [
+        "Make Skip setup persist completedAt and close the wizard.",
+        "Add Escape and an explicit close affordance; return focus to the view on close.",
+        "Add onboardingRoot to syncScrollLock and trap focus while open.",
+        "Guard Continue/Skip during a transition and await persistOnboarding.",
+        "Persist currentStep in onboardingBack too."
+      ],
+      "acceptance": [
+        "Skip setup reaches the dashboard in one click.",
+        "Escape closes the wizard, and focus returns to the dashboard.",
+        "Tab does not reach background controls while the wizard is open.",
+        "Rapid Continue clicks advance exactly one step and write one state."
+      ],
+      "tests": ["Manual: fresh run, Skip, Escape, keyboard-only pass."]
+    },
+    {
+      "id": "0007",
+      "title": "Report ML runtimes honestly",
+      "severity": "high",
+      "area": "onboarding",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["lib/scanner.js", "public/app.js"],
+      "source": "audit O2",
+      "summary": "scanRuntimes pushes whisper.cpp/llama.cpp/MLX/ggml unconditionally, so Setup and the Runtimes page always claim they are installed.",
+      "steps": [
+        "Only mark a runtime present when its binary/version probe succeeds.",
+        "Let viewRuntimes reach its empty state with install guidance when none resolve.",
+        "Fix missingComponents and the Get set up badge to count accordingly."
+      ],
+      "acceptance": [
+        "On a Mac without these tools, Runtimes shows the empty state and Setup does not mark it ready.",
+        "With whisper.cpp installed, it is listed correctly."
+      ],
+      "tests": ["Extend scanner tests for present/absent runtimes."]
+    },
+    {
+      "id": "0008",
+      "title": "Live views: preserve filter and keyboard focus across polls",
+      "severity": "high",
+      "area": "ui",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js"],
+      "source": "audit B3, U2",
+      "summary": "Monitor/Network polls replace whole subtrees, wiping the active filter and any focused control every 2-5s.",
+      "steps": [
+        "Re-apply the active filter after each live re-render (loadMonitor, refreshProcRows, loadNetwork).",
+        "Skip the re-render while the subtree contains document.activeElement, or patch only changed values.",
+        "Re-target the row cursor after a re-render."
+      ],
+      "acceptance": [
+        "A typed filter survives Monitor and Network polls.",
+        "Focus on a process Quit/Details button or range control is not stolen by a poll."
+      ],
+      "tests": ["Manual: type a filter on Monitor, wait 5s, confirm it holds."]
+    },
+    {
+      "id": "0009",
+      "title": "Cache clear must not be undone by in-flight memoized work",
+      "severity": "medium",
+      "area": "bug",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["lib/cache.js", "lib/overview.js"],
+      "source": "audit B2",
+      "summary": "memo() rewrites the entry when an in-flight computation resolves after clear(), so post-action reclaim/health can stay stale for the TTL.",
+      "steps": [
+        "Add a generation/epoch to the cache; drop results whose generation is stale.",
+        "Do the same for overview's own cache."
+      ],
+      "acceptance": [
+        "Emptying Trash updates reclaimable bytes immediately, not after TTL."
+      ],
+      "tests": ["Add cache test: clear during in-flight fn."]
+    },
+    {
+      "id": "0010",
+      "title": "Serialize metrics sampling / isolate fresh-sample deltas",
+      "severity": "medium",
+      "area": "bug",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["lib/metrics.js", "server.js"],
+      "source": "audit B4",
+      "summary": "lastCpu/lastNet are mutated by both the 15s sampler and ?fresh=1, producing cpu:null and distorted net rates when they overlap.",
+      "steps": [
+        "Add a single-flight guard around collectSample.",
+        "Prevent on-demand samples from mutating the sampler baselines (per-call snapshots)."
+      ],
+      "acceptance": [
+        "CPU tile never shows a spurious dash under concurrent polling.",
+        "Persisted net rates stay stable."
+      ],
+      "tests": ["Add unit test for the single-flight guard."]
+    },
+    {
+      "id": "0011",
+      "title": "Bound pollJob retries and resolve orphaned jobs",
+      "severity": "medium",
+      "area": "bug",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js"],
+      "source": "audit B5",
+      "summary": "pollJob retries every 2s forever on a 404 after a server restart, leaving the job 'running' and the wake lock held.",
+      "steps": [
+        "Add backoff and a retry cap.",
+        "On a non-transient error (404), mark the job failed/removed and stop."
+      ],
+      "acceptance": [
+        "Restarting the server with a job open resolves the dock entry within a few seconds."
+      ],
+      "tests": ["Manual: start a job, restart the service, watch the dock clear."]
+    },
+    {
+      "id": "0012",
+      "title": "Do not probe Full Disk Access implicitly on Overview load",
+      "severity": "medium",
+      "area": "onboarding",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["lib/overview.js", "server.js", "lib/setup.js"],
+      "source": "audit O3",
+      "summary": "overview.report() reads ~/Library/Safari|Mail on load, which can fire the macOS TCC prompt before onboarding explains it.",
+      "steps": [
+        "Remove the FDA probe from the default report path.",
+        "Gate it behind the explicit, explained action the wizard already uses.",
+        "Reuse the wizard's recorded state where possible."
+      ],
+      "acceptance": [
+        "Loading Overview never triggers the 'access data from other apps' prompt on first run."
+      ],
+      "tests": ["Manual: fresh run, confirm no TCC prompt before the macOS access step."]
+    },
+    {
+      "id": "0013",
+      "title": "Install helper must report the real result",
+      "severity": "medium",
+      "area": "onboarding",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js"],
+      "source": "audit O4",
+      "summary": "The helper install polls 40x without watching job status and shows success even when brew/install failed.",
+      "steps": [
+        "Track the returned jobId; stop polling on done/failed.",
+        "Surface job.error; only show success when the notifier actually changed."
+      ],
+      "acceptance": [
+        "On a Mac without Homebrew, the button ends in an error, not a false success."
+      ],
+      "tests": ["Manual: simulate a failing install."]
+    },
+    {
+      "id": "0014",
+      "title": "Setup Open for not-installed components must not dead-end",
+      "severity": "medium",
+      "area": "onboarding",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js"],
+      "source": "audit O5",
+      "summary": "data-goto plus the available() gate silently redirects ComfyUI/OpenClaw setup rows to Overview, hiding their install guidance.",
+      "steps": [
+        "For not-installed components, link to the install steps inline, or let the empty state render."
+      ],
+      "acceptance": [
+        "Clicking Open on a not-installed component shows how to install it."
+      ],
+      "tests": ["Manual: Setup, click Open on a missing component."]
+    },
+    {
+      "id": "0015",
+      "title": "Build the dashboard health check URL from HOST/PORT",
+      "severity": "medium",
+      "area": "bug",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["lib/health.js"],
+      "source": "audit O6",
+      "summary": "The dashboard health check hardcodes port 8790, so under the documented PORT override it reports the dashboard as down.",
+      "steps": ["Derive the URL from the configured HOST/PORT."],
+      "acceptance": ["Running on a non-default port does not report the dashboard as down."],
+      "tests": ["Start on an alternate port and confirm the dashboard check passes."]
+    },
+    {
+      "id": "0016",
+      "title": "ComfyUI restart must target the real service label",
+      "severity": "medium",
+      "area": "onboarding",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js", "lib/actions.js"],
+      "source": "audit O7",
+      "summary": "The ComfyUI view always offers restart of ai.openclaw.comfyui, which 403s for any other install.",
+      "steps": ["Only render the action when that label is present, or resolve the real label from the scan."],
+      "acceptance": ["Restart works when the service exists and is absent otherwise."],
+      "tests": ["Manual: with and without the label."]
+    },
+    {
+      "id": "0017",
+      "title": "Settings can confirm Full Disk Access as granted",
+      "severity": "medium",
+      "area": "onboarding",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js", "lib/setup.js"],
+      "source": "audit O8",
+      "summary": "/api/setup omits fullDiskAccess, so the Settings row always reads Optional even after granting.",
+      "steps": ["Offer the explicit Re-check on the Settings row, or persist the last probe result."],
+      "acceptance": ["After granting FDA, the Settings row reflects it."],
+      "tests": ["Manual: Re-check on the Settings row."]
+    },
+    {
+      "id": "0018",
+      "title": "Refresh service rows on the action that changed them",
+      "severity": "medium",
+      "area": "ui",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js"],
+      "source": "audit O9",
+      "summary": "After Start/Stop/Restart the Services list is not re-rendered; rows stay stale until the next rescan.",
+      "steps": ["In refreshAfterAction for services, re-render the list (or patch the affected row) in addition to loadHealth()."],
+      "acceptance": ["Stopping a service updates its row within a second."],
+      "tests": ["Manual: stop a service, watch the row."]
+    },
+    {
+      "id": "0019",
+      "title": "Escape server strings in rows and tables",
+      "severity": "medium",
+      "area": "ui",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js"],
+      "source": "audit U3",
+      "summary": "Network interface rows pass iface.* raw through row(), and Security/Services interpolate port/pid raw into markup and data-*.",
+      "steps": ["esc() the joined interface string; esc() or numeric-coerce port/pid everywhere."],
+      "acceptance": ["No server-provided string reaches innerHTML unescaped in these views."],
+      "tests": ["Grep for raw interpolations in the cited functions."]
+    },
+    {
+      "id": "0020",
+      "title": "Give toggle switches accessible names",
+      "severity": "medium",
+      "area": "ui",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js"],
+      "source": "audit U4",
+      "summary": "switchRow, settings booleans and wizard toggles render an unlabeled checkbox.",
+      "steps": ["Add aria-label or aria-labelledby pointing at the row title for every toggle input."],
+      "acceptance": ["A screen reader announces each toggle with its label."],
+      "tests": ["Manual: VoiceOver over Settings toggles."]
+    },
+    {
+      "id": "0021",
+      "title": "Announce async results and wizard step changes",
+      "severity": "medium",
+      "area": "ui",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js", "public/index.html"],
+      "source": "audit U5",
+      "summary": "Permission tests, ping/port results, scan status and 'Step N of M' update elements with no aria-live.",
+      "steps": ["Add role=status/aria-live=polite to .wc-status, #net-probe-result, #scan-status; announce wizard step changes."],
+      "acceptance": ["Async status changes are announced."],
+      "tests": ["Manual: screen reader pass."]
+    },
+    {
+      "id": "0022",
+      "title": "Overview extras: show an error and retry instead of blanking",
+      "severity": "medium",
+      "area": "ui",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js"],
+      "source": "audit U6",
+      "summary": "loadOverviewExtras catches to null and blanks the health card/checklist with no error or retry.",
+      "steps": ["Render an error empty-state with a Retry button when the overview/series fetch fails."],
+      "acceptance": ["A failed extras load shows an error with a working Retry."],
+      "tests": ["Manual: block the request and reload."]
+    },
+    {
+      "id": "0023",
+      "title": "Security hardening batch (low)",
+      "severity": "low",
+      "area": "security",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["server.js", "lib/webauthn.js", "lib/network.js", "lib/store.js", "lib/packages.js"],
+      "source": "audit S5-S10",
+      "summary": "Token rotation, constant-time compare, fresh-sample rate limiting, option injection, path-prefix/symlink reads, and webauthn grant hardening.",
+      "steps": [
+        "Rotate the token per run (or document the persistent token accurately).",
+        "Use crypto.timingSafeEqual for the token compare.",
+        "Rate-limit /api/metrics/live?fresh=1.",
+        "Reject host/name tokens starting with '-'.",
+        "Anchor prefix checks with path.sep and resolve realpath on read routes.",
+        "WebAuthn: check signCount, bind grants to actionId + single use, require UV at registration."
+      ],
+      "acceptance": ["Each item is addressed or explicitly deferred with a note."],
+      "tests": ["Unit tests for the prefix check and option validation."]
+    },
+    {
+      "id": "0024",
+      "title": "Bug hardening batch (low)",
+      "severity": "low",
+      "area": "bug",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["server.js"],
+      "source": "audit B6, B7",
+      "summary": "serveStatic prefix check lacks a path separator; /api/ports/detail does not range-check port.",
+      "steps": [
+        "Compare resolved === PUBLIC_DIR || startsWith(PUBLIC_DIR + path.sep).",
+        "Require an integer port in 1..65535 or return 400."
+      ],
+      "acceptance": ["Sibling 'public*' dirs are not served; invalid ports 400."],
+      "tests": ["Add unit tests for both."]
+    },
+    {
+      "id": "0025",
+      "title": "Onboarding polish batch (low)",
+      "severity": "low",
+      "area": "onboarding",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js"],
+      "source": "audit O10, O12, O13",
+      "summary": "ComfyUI copy button copies a docs URL; Pull Ollama model is offered without Ollama; security fix links open a generic pane.",
+      "steps": [
+        "Give ComfyUI a real install command or relabel the button.",
+        "Hide the Pull Ollama action unless ollama.installed.",
+        "Map each security posture id to its specific deep link."
+      ],
+      "acceptance": ["Each of the three is corrected."],
+      "tests": ["Manual checks per item."]
+    },
+    {
+      "id": "0026",
+      "title": "UI robustness batch (low)",
+      "severity": "low",
+      "area": "ui",
+      "status": "ready",
+      "depends_on": [],
+      "files": ["public/app.js"],
+      "source": "audit U9, U10, U11",
+      "summary": "Disk refresh error discards the view; context-menu listener can re-add after removal; overlapping poll responses have no sequence guard.",
+      "steps": [
+        "Keep prior disk content and overlay an inline error/retry; set aria-busy.",
+        "Register the context-menu close listener synchronously or track the pending timer.",
+        "Add a monotonic token to drop stale poll responses."
+      ],
+      "acceptance": ["Each item addressed; no regressions in Disk/Monitor."],
+      "tests": ["Manual checks."]
+    },
+    {
+      "id": "0027",
+      "title": "Design uplift: onboarding",
+      "severity": "low",
+      "area": "design",
+      "status": "ready",
+      "depends_on": ["0006"],
+      "files": ["public/app.js", "public/styles.css"],
+      "source": "audit design uplift 1,2,7,8",
+      "summary": "Welcome step is nearly empty; the wizard re-centers between steps; mixed card language; bare progress bar.",
+      "steps": [
+        "Render onboardingStackChips() on the welcome step with a one-line lede.",
+        "Top-align the wizard body with a min-height so the header stays put.",
+        "Render folder grants as wizardInfoCards.",
+        "Add progressbar semantics and reposition the step label."
+      ],
+      "acceptance": ["First impression shows what the app detected; steps stop jumping."],
+      "tests": ["Manual walkthrough."]
+    },
+    {
+      "id": "0028",
+      "title": "Design uplift: core dashboard",
+      "severity": "low",
+      "area": "design",
+      "status": "ready",
+      "depends_on": ["0008"],
+      "files": ["public/app.js", "public/styles.css"],
+      "source": "audit design uplift 3,4,5,6",
+      "summary": "Inconsistent empty states; mixed table/row usage; no value-change motion; Monitor density is high for its cadence.",
+      "steps": [
+        "Standardize core empty states on emptyState().",
+        "Pick one container type per data shape.",
+        "Add a short value-change fade gated by reduced-motion.",
+        "Collapse the Monitor trends/explain behind a disclosure."
+      ],
+      "acceptance": ["Core views feel consistent and calm."],
+      "tests": ["Manual walkthrough."]
+    }
+  ]
+}
