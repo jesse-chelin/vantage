@@ -4,13 +4,11 @@
 // Shared updater used by both update.sh and (indirectly) the in-app updater.
 // Keeping one implementation means the terminal and the toolbar behave alike.
 //
-//   node bin/vantage-update.js           pull and restart
+//   node bin/vantage-update.js           pull, restart, rebuild native if it changed
 //   node bin/vantage-update.js --check   report status, exit 10 if an update waits
-//   node bin/vantage-update.js --native  pull, restart, then rebuild the native app
+//   node bin/vantage-update.js --native  force a native app rebuild
 //   node bin/vantage-update.js --json    machine-readable result
 
-const path = require('node:path');
-const { run } = require('../lib/exec');
 const update = require('../lib/update');
 
 const args = process.argv.slice(2);
@@ -42,18 +40,12 @@ const has = (flag) => args.includes(flag);
   }
 
   console.log(`Updating ${status.behind} commit${status.behind === 1 ? '' : 's'}: ${status.subject}`);
-  const result = await update.apply();
-  console.log(result.depsChanged ? `Updated ${result.before} → ${result.after} and refreshed dependencies.` : `Updated ${result.before} → ${result.after}.`);
+  const result = await update.apply(has('--native') ? { native: true } : {});
+  console.log(`Updated ${result.before} → ${result.after}.`);
+  if (result.depsChanged) console.log('Refreshed dependencies.');
+  if (result.nativeBuilt) console.log('Rebuilt the native Mac app.');
+  else if (result.nativeChanged && result.nativeReason) console.log(`Native rebuild skipped: ${result.nativeReason}`);
   console.log(result.message);
-
-  if (has('--native')) {
-    const dir = path.join(__dirname, '..', 'native');
-    if (require('node:fs').existsSync(path.join(dir, 'build.sh'))) {
-      console.log('Rebuilding the native Mac app…');
-      const built = await run('/bin/sh', [path.join(dir, 'build.sh')], { timeout: 300_000 });
-      console.log(built.ok ? 'Native app rebuilt.' : 'Native build skipped.');
-    }
-  }
 })().catch((error) => {
   console.error(`Update failed: ${error.message}`);
   process.exit(1);

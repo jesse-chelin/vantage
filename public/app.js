@@ -7153,6 +7153,7 @@ function renderUpdateChip() {
 const UPDATE_STEPS = [
   ['pull', 'Pull the latest changes', 'download'],
   ['deps', 'Refresh dependencies', 'box'],
+  ['native', 'Rebuild the native app', 'app'],
   ['restart', 'Restart the service', 'restart'],
   ['reconnect', 'Reconnect', 'pulse'],
 ];
@@ -7167,7 +7168,7 @@ function showUpdateOverlay() {
       <div class="update-card" role="alertdialog" aria-modal="true" aria-live="polite">
         <div class="update-glyph"><span class="update-spinner"></span>${svg('download')}</div>
         <h2 class="update-title">Updating Vantage</h2>
-        <p class="update-sub">Pulling the latest changes and restarting. This takes a few seconds.</p>
+        <p class="update-sub">Pulling changes, refreshing dependencies and rebuilding the native app when needed.</p>
         <ul class="update-steps">
           ${UPDATE_STEPS.map(([id, label, icon]) => `<li class="update-step" data-step="${id}" data-state="pending"><span class="us-mark">${svg(icon)}</span><span class="us-label">${label}</span></li>`).join('')}
         </ul>
@@ -7259,6 +7260,7 @@ async function applyUpdate() {
 
   setUpdateStep('pull', 'done');
   setUpdateStep('deps', result.depsChanged ? 'done' : 'skip');
+  setUpdateStep('native', result.nativeBuilt ? 'done' : (result.nativeChanged ? 'failed' : 'skip'));
   if (result.commits && result.commits.length) {
     const box = els.modalRoot && els.modalRoot.querySelector('[data-update-changes]');
     if (box) {

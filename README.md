@@ -56,15 +56,16 @@ onboarding "Run it as an app" step (or upfront with `install.sh --native`).
 Vantage also updates itself. When new commits land on `main`, a small **Update**
 chip appears in the toolbar, **Settings → About** shows the version and status,
 and a notification fires once per release (macOS banner and/or Web Push, even
-when the tab is closed). One click pulls the changes, restarts the service, and
+when the tab is closed). One click pulls the changes, refreshes dependencies,
+rebuilds the native Mac app when its sources changed, restarts the service, and
 reconnects the page.
 
 Prefer the terminal? `update.sh` runs the same code path as the in-app updater:
 
 ```sh
-~/Projects/vantage/update.sh            # pull and restart
+~/Projects/vantage/update.sh            # pull, restart, rebuild native if it changed
 ~/Projects/vantage/update.sh --check    # exit 10 if an update is waiting
-~/Projects/vantage/update.sh --native   # also rebuild the native Mac app
+~/Projects/vantage/update.sh --native   # force a native app rebuild
 ```
 
 Flags: `--native`, `--uninstall`. Override the location or port with
