@@ -1,5 +1,5 @@
 ---
-description: Launch the read-only Vantage audit swarm (bug-hunter + security-auditor + ui-reviewer) in parallel and merge findings into one ranked report.
+description: Launch the read-only Vantage audit swarm (bug-hunter + security-auditor + ui-reviewer + onboarding-reviewer) in parallel and merge findings into one ranked report.
 agent: build
 ---
 
@@ -7,12 +7,16 @@ Orchestrate a **read-only** audit swarm over the Vantage app in the current
 working directory. No application file may be modified.
 
 Scope: $ARGUMENTS
-(If the scope above is empty, audit the entire application.)
+(If the scope above is empty, default to the current priority: **onboarding and
+first-run experience**, then the **core management dashboard** (Overview,
+Monitor, Disk, Services, Network, Security). This swarm locks down what exists;
+it does not propose new features.)
 
 Do this in order:
 
-1. **Fan out, launch all three subagents in parallel**, each with
+1. **Fan out, launch all four subagents in parallel**, each with
    `background: true`, in a single batch of calls:
+   - `onboarding-reviewer`
    - `bug-hunter`
    - `security-auditor`
    - `ui-reviewer`
@@ -32,7 +36,7 @@ Do this in order:
      separate section.
 
 4. **Persist** the merged report to `reports/audit-<YYYY-MM-DD>.md` (create the
-   directory if needed), with a short header stating scope, date, and the three
+   directory if needed), with a short header stating scope, date, and the four
    agents used.
 
 5. **Summarize in chat**: the top findings with severities, the overall count,
