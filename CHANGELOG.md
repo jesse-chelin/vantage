@@ -5,13 +5,14 @@ This file is generated from the git history. Refresh it with `npm run changelog`
 
 ## Unreleased (2026-10-12)
 
-### Added
+### New features
 
+- Add a friendly per-version Changelog section ([798386b](https://github.com/jesse-chelin/vantage/commit/798386b))
 - Track DeepSeek cloud spend and add section visibility settings ([c9a9dfe](https://github.com/jesse-chelin/vantage/commit/c9a9dfe))
 - Add agent backlog: structured store, CLI, worker agent and command ([b6bc51f](https://github.com/jesse-chelin/vantage/commit/b6bc51f))
 - Add onboarding reviewer to the swarm; record first-run and core-dashboard audit ([122f833](https://github.com/jesse-chelin/vantage/commit/122f833))
 
-### Fixed
+### Fixes
 
 - Fix dashboard not reflecting removed OpenClaw and ComfyUI ([9b323b2](https://github.com/jesse-chelin/vantage/commit/9b323b2))
 
@@ -26,7 +27,7 @@ This file is generated from the git history. Refresh it with `npm run changelog`
 
 ## v0.9.0-beta (2026-10-09)
 
-### Added
+### New features
 
 - Add GitHub release workflow for tagged versions ([9e869bf](https://github.com/jesse-chelin/vantage/commit/9e869bf))
 - Add auto-generated changelog and in-app What's new view ([a899f95](https://github.com/jesse-chelin/vantage/commit/a899f95))
@@ -39,12 +40,12 @@ This file is generated from the git history. Refresh it with `npm run changelog`
 - Add read-only audit swarm: bug-hunter, security-auditor, ui-reviewer + /swarm-audit ([262709f](https://github.com/jesse-chelin/vantage/commit/262709f))
 - Baseline: Vantage dashboard before agent swarm audits ([916babf](https://github.com/jesse-chelin/vantage/commit/916babf))
 
-### Changed
+### Enhancements
 
 - Shared updater, Beta labeling, and em-dash cleanup ([fab8796](https://github.com/jesse-chelin/vantage/commit/fab8796))
 - Rebrand: drop AI-dashboard naming (Vantage, local.vantage service) ([a5e8ed7](https://github.com/jesse-chelin/vantage/commit/a5e8ed7))
 
-### Fixed
+### Fixes
 
 - Fix updating overlay hanging with no feedback or escape ([b7b60d3](https://github.com/jesse-chelin/vantage/commit/b7b60d3))
 
