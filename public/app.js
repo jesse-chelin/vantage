@@ -106,7 +106,7 @@ const ACCENTS = {
   purple: ['#8b5cf6', '#a98bfa'],
   graphite: ['#7d838f', '#a6acb7'],
 };
-const DEFAULT_PREFS = { accent: 'system', density: 'comfortable', motion: 'auto', material: 'glass', sidebar: 'expanded', pins: [], notifyBrowser: false, wakeLock: true, touchId: false, idlePause: true };
+const DEFAULT_PREFS = { accent: 'system', density: 'comfortable', motion: 'auto', material: 'glass', sidebar: 'expanded', pins: [], views: {}, notifyBrowser: false, wakeLock: true, touchId: false, idlePause: true };
 let systemAccent = null;
 
 // The "System" swatch must always show the detected macOS accent, never the
@@ -162,6 +162,40 @@ function togglePin(id) {
   const pins = Array.isArray(prefs.pins) ? prefs.pins : [];
   setPref('pins', pins.includes(id) ? pins.filter((p) => p !== id) : [...pins, id]);
   renderNav();
+}
+
+// Sidebar section visibility. Stored as an opt-out map ({} = everything shown)
+// and driven by Settings → Navigation. `settings` itself is always available.
+function viewVisible(id) {
+  if (!prefs.views || prefs.views[id] !== false) return true;
+  // Overview is the anchor: if a corrupt/stale pref hides everything, keep it
+  // visible so the sidebar and the router never empty out.
+  if (id === 'overview') {
+    return !VIEWS.some((v) => v.id !== 'settings' && v.id !== 'overview' && prefs.views[v.id] !== false);
+  }
+  return false;
+}
+function visibleViews() {
+  const shown = VIEWS.filter((v) => v.id !== 'settings' && viewVisible(v.id));
+  return shown.length ? shown : VIEWS.filter((v) => v.id === 'overview');
+}
+// Returns false (and changes nothing) when hiding would leave no section visible.
+function setViewVisible(id, visible) {
+  const next = { ...(prefs.views || {}) };
+  if (visible) delete next[id];
+  else next[id] = false;
+  const remaining = VIEWS.filter((v) => v.id !== 'settings' && next[v.id] !== false);
+  if (!remaining.length) return false;
+  setPref('views', next);
+  return true;
+}
+// First visible section that is available in the current inventory, or null.
+function fallbackView(data) {
+  const usable = visibleViews().find((v) => {
+    if (!v.available) return true;
+    try { return Boolean(v.available(data)); } catch { return true; }
+  });
+  return usable ? usable.id : null;
 }
 function toggleSidebar() {
   setPref('sidebar', prefs.sidebar === 'collapsed' ? 'expanded' : 'collapsed');
@@ -371,6 +405,7 @@ const ICONS = {
   sidebar: '<rect x="1.8" y="3" width="12.4" height="10" rx="2"/><path d="M6.4 3v10"/>',
   monitor: '<rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.6"/><path d="M6 14h4M8 11.2V14"/>',
   film: '<rect x="1.8" y="2.6" width="12.4" height="10.8" rx="1.6"/><path d="M4.9 2.6v10.8M11.1 2.6v10.8M1.8 8h12.4"/>',
+  dollar: '<circle cx="8" cy="8" r="5.9"/><path d="M8 3.7v8.6M10.3 5.7c-.3-1-1.2-1.5-2.3-1.5-1.2 0-2.2.6-2.2 1.6s.9 1.4 2.2 1.7c1.3.3 2.2.7 2.2 1.8S9.2 11 8 11s-2.2-.6-2.3-1.6"/>',
   music: '<path d="M6.2 11.8V3.4l6-1.3v8.3"/><circle cx="4.4" cy="11.8" r="1.9"/><circle cx="10.4" cy="10.4" r="1.9"/>',
   camera: '<rect x="1.6" y="4.4" width="12.8" height="8.4" rx="2"/><path d="M5.7 4.4l.9-1.8h2.8l.9 1.8"/><circle cx="8" cy="8.6" r="2.4"/>',
 };
@@ -472,6 +507,7 @@ const VIEWS = [
   { id: 'ollama', label: 'Models', icon: 'brain', title: 'Ollama Models', count: (d) => d.summary?.counts?.ollamaModels },
   { id: 'comfy', label: 'Image Gen', icon: 'photo', title: 'ComfyUI', count: (d) => d.summary?.counts?.comfyCheckpoints, available: (d) => Boolean(d.comfyui && d.comfyui.installed) },
   { id: 'runtimes', label: 'Runtimes', icon: 'cube', title: 'ML Runtimes' },
+  { id: 'spend', label: 'Cloud Spend', icon: 'dollar', title: 'Cloud Spend' },
   { id: 'agent', label: 'Agent Stack', icon: 'bot', title: 'Agent Stack', available: (d) => Boolean(d.agentStack && !d.agentStack.error && d.agentStack.openclaw) },
   { id: 'activity', label: 'Activity', icon: 'history', title: 'Agent Activity', available: (d) => Boolean(d.agentStack && !d.agentStack.error && d.agentStack.openclaw) },
   { id: 'ainews', label: 'AI News', icon: 'sparkle', title: 'AI News' },
@@ -482,7 +518,7 @@ const VIEWS = [
 const NAV_SECTIONS = [
   { label: 'General', ids: ['overview', 'setup', 'monitor', 'storage', 'network', 'services', 'security', 'notify'] },
   { label: 'Manage', ids: ['brew', 'apps', 'packages', 'store', 'maintenance'] },
-  { label: 'AI', ids: ['ollama', 'comfy', 'runtimes', 'agent', 'activity', 'ainews'] },
+  { label: 'AI', ids: ['ollama', 'comfy', 'runtimes', 'spend', 'agent', 'activity', 'ainews'] },
   { label: 'System', ids: ['history'] },
 ];
 
@@ -2326,6 +2362,180 @@ async function loadAINews() {
   }
 }
 
+// --- cloud spend (DeepSeek) ------------------------------------------------
+
+const spendState = { data: null, loading: false };
+
+const CURRENCY_SYMBOLS = { USD: '$', CNY: '¥', EUR: '€', GBP: '£', JPY: '¥' };
+
+function fmtMoney(amount, currency = 'USD') {
+  if (amount == null || amount === '' || Number.isNaN(Number(amount))) return '–';
+  const value = Number(amount);
+  const digits = value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const symbol = CURRENCY_SYMBOLS[currency];
+  if (!symbol) return `${currency} ${digits}`;
+  return value < 0 ? `-${symbol}${digits.replace('-', '')}` : `${symbol}${digits}`;
+}
+
+function viewSpend() {
+  return `<div id="spend-root">${skeletonRows(6)}</div>`;
+}
+
+async function loadSpend(force = false) {
+  try {
+    let data = await api('/api/spend');
+    if (force || (data.connected && data.stale)) {
+      try {
+        data = await api('/api/spend/refresh', { method: 'POST', body: {} });
+      } catch (error) {
+        data = { ...data, lastError: error.message };
+      }
+    }
+    spendState.data = data;
+    renderSpendSurfaces();
+  } catch (error) {
+    const host = document.getElementById('spend-root');
+    if (host) host.innerHTML = `<div class="empty-note">Could not load cloud spend: ${esc(error.message)}</div>`;
+  }
+}
+
+function renderSpend() {
+  const host = document.getElementById('spend-root');
+  if (host && spendState.data) host.innerHTML = spendBody(spendState.data);
+}
+
+// Re-render whatever spend surface is on screen (the Cloud Spend view and/or the
+// Settings → Cloud spend pane) so a change made in one is reflected in the other.
+function renderSpendSurfaces() {
+  if (document.getElementById('spend-root')) renderSpend();
+  if (state.view === 'settings' && settingsState.section === 'cloudspend') renderSettingsSection();
+}
+
+let spendSettingsLoading = false;
+let spendSettingsTried = false;
+async function loadSpendSettings() {
+  if (spendSettingsLoading || spendSettingsTried || spendState.data) return;
+  spendSettingsLoading = true;
+  spendSettingsTried = true;
+  try { spendState.data = await api('/api/spend'); } catch { /* keep prior */ }
+  spendSettingsLoading = false;
+  renderSpendSurfaces();
+}
+
+async function patchSpendConfig(patch) {
+  try {
+    spendState.data = await api('/api/spend/config', { method: 'POST', body: { config: patch } });
+    renderSpendSurfaces();
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
+
+function spendBody(data) {
+  const currency = data.currency || 'USD';
+  const spend = data.spend || {};
+  const source = spend.source === 'api' ? 'from balance history' : 'from the ledger';
+  const readOnly = Boolean(state.session && state.session.readOnly);
+  const status = data.connected
+    ? data.lastError
+      ? pill('needs attention', 'warn')
+      : pill('connected', 'good')
+    : pill('not connected', '');
+
+  const hero = `<div class="card hero">
+    <div class="hero-main">
+      <div class="hero-title">${esc(data.providerLabel || 'DeepSeek')} cloud spend</div>
+      <div class="hero-sub">${
+        data.connected
+          ? data.balance != null
+            ? `Balance ${esc(fmtMoney(data.balance, currency))} · ${fmtNum(data.sampleCount)} sample${data.sampleCount === 1 ? '' : 's'} recorded`
+            : 'Connected, no balance sampled yet.'
+          : 'Connect an API key to sample your live balance, or keep a manual ledger below.'
+      }</div>
+    </div>
+    <div class="hero-pills">${status}${readOnly ? '' : `<button class="btn small" data-spend-refresh>${svg('restart')} Refresh</button>`}</div>
+  </div>`;
+
+  const tiles = [
+    { icon: 'dollar', label: 'Balance', value: fmtMoney(data.balance, currency), tone: data.balance ? 'accent' : '', hint: data.sampledAt ? `sampled ${relativeTime(data.sampledAt)}` : 'no live samples' },
+    { icon: 'pulse', label: 'Today', value: fmtMoney(spend.today, currency), hint: source },
+    { icon: 'history', label: 'Last 30 days', value: fmtMoney(spend.month, currency), hint: source },
+    { icon: 'bolt', label: 'All-time top-ups', value: fmtMoney(spend.topups, currency), tone: spend.topups > 0 ? 'good' : '', hint: 'credits added' },
+  ];
+
+  const series = (data.balanceSeries || []).map((point) => point.total);
+  const chart = series.length >= 2
+    ? `<div class="pad"><div class="chart-label"><span>Balance</span><span class="chart-stat">${esc(fmtMoney(series[series.length - 1], currency))} now · low ${esc(fmtMoney(Math.min(...series), currency))}</span></div>${areaChart(series, { height: 120, color: '#4cc2c4' })}</div>`
+    : data.connected
+      ? spendEmpty('pulse', 'Building balance history', 'Vantage records a sample every time the balance is checked. Come back after a second sample to see the trend.')
+      : spendEmpty('dollar', 'No live balance yet', 'Connect a DeepSeek API key to sample your balance over time and derive spend automatically.', '<button class="btn small primary" data-open-settings="cloudspend">Connect DeepSeek</button>');
+
+  const entries = (data.ledger && data.ledger.entries) || [];
+  const ledgerRows = entries.slice(0, 100).map((entry) => row({
+    title: esc(entry.note || (entry.kind === 'topup' ? 'Top-up' : 'Usage')),
+    sub: esc(new Date(entry.ts).toLocaleString()),
+    size: `${entry.kind === 'topup' ? '+' : '−'}${esc(fmtMoney(entry.amount, currency))}`,
+    badge: entry.kind === 'topup' ? pill('top-up', 'good') : pill('usage'),
+    actions: `<button class="btn small danger" data-spend-remove="${esc(entry.id)}">Remove</button>`,
+    search: `${entry.note || ''} ${entry.kind}`,
+  })).join('') || spendEmpty('history', 'No entries yet', 'Log usage or top-ups below, or connect an API key for automatic tracking.');
+
+  const ledgerForm = readOnly ? '' : `<div class="spend-form">
+    <select class="row-input spend-kind" data-spend-kind aria-label="Entry type"><option value="usage">Usage</option><option value="topup">Top-up</option></select>
+    <input class="row-input spend-amount" type="number" min="0" step="0.01" placeholder="Amount" data-spend-amount aria-label="Amount">
+    <input class="row-input spend-note" type="text" placeholder="Note (optional)" data-spend-note aria-label="Note">
+    <button class="btn small primary" data-spend-add>Add entry</button>
+  </div>`;
+
+  const apiControl = data.connected
+    ? `<div class="sr-value"><span class="mono">${esc(data.keyHint || '••••')}</span></div><button class="btn small" data-open-settings="cloudspend">Manage</button>`
+    : '<button class="btn small primary" data-open-settings="cloudspend">Connect DeepSeek</button>';
+  const errorRow = data.connected && data.lastError ? sInfoRow('warning', 'Last error', data.lastError, '') : '';
+  const sampleHint = data.sampleCount ? `${data.sampleCount} sample${data.sampleCount === 1 ? '' : 's'}` : 'no samples yet';
+
+  const burn = data.burn || {};
+  const forecastRows =
+    sInfoRow('pulse', 'Burn rate', burn.basis ? `Averaged over the ${burn.basis}.` : 'Not enough history yet.', `<span class="sr-value">${esc(fmtMoney(burn.perDay, currency))}<span class="faint"> / day</span></span>`) +
+    sInfoRow('history', 'Projected month', `${burn.daysLeftInMonth || 0} day${burn.daysLeftInMonth === 1 ? '' : 's'} left in the month.`, `<span class="sr-value">${esc(fmtMoney(burn.projectedMonth, currency))}</span>`) +
+    sInfoRow('clock', 'Balance lasts', burn.balanceDays ? 'At the current burn rate.' : 'Needs a burn rate and a positive balance.', `<span class="sr-value">${burn.balanceDays ? `~${burn.balanceDays} day${burn.balanceDays === 1 ? '' : 's'}` : '–'}</span>`);
+
+  const config = data.config || { alerts: {} };
+  const budget = config.budget || 0;
+  const monthSpend = spend.month || 0;
+  const budgetBlock = budget > 0
+    ? `<div class="group"><div class="group-title">Budget <span class="hint">${Math.min(100, Math.round((monthSpend / budget) * 100))}% used</span></div>${card(`<div class="pad">${spendBudgetBar(monthSpend, budget, config.budgetWarnPct || 80, currency)}</div>`)}</div>`
+    : '';
+
+  return `${hero}
+    <div class="grid stats">${tiles.map(statTile).join('')}</div>
+    <div class="group"><div class="group-title">Balance history <span class="hint">${sampleHint}</span></div>${card(chart)}</div>
+    ${budgetBlock}
+    ${settingsGroup('Forecast', forecastRows)}
+    ${group('Ledger', 'manual entries', card(`${ledgerForm}<div class="rows">${ledgerRows}</div>`))}
+    ${settingsGroup('DeepSeek API', sInfoRow('key', 'API key', data.connected ? 'Stored locally, used only to read your balance.' : 'Connect DeepSeek to sample your live balance and derive spend.', apiControl) + errorRow)}
+    <p class="settings-note">Spend is derived from drops between balance samples; top-ups are tracked separately. Vantage samples the balance in the background, so alerts keep working with this page closed.</p>`;
+}
+
+function spendBudgetBar(monthSpend, budget, warnPct, currency) {
+  const pct = budget > 0 ? Math.min(100, Math.round((monthSpend / budget) * 100)) : 0;
+  const color = pct >= 100 ? 'var(--red)' : pct >= warnPct ? 'var(--orange)' : 'var(--accent)';
+  return `<div class="chart-label"><span>Budget used this month</span><span class="chart-stat">${esc(fmtMoney(monthSpend, currency))} of ${esc(fmtMoney(budget, currency))} · ${pct}%</span></div>${bar(pct, color)}`;
+}
+
+function spendNumberRow(config, key, icon, label, help, placeholder) {
+  const value = config[key];
+  return `<div class="settings-row"><span class="sr-ico">${svg(icon)}</span><div class="sr-main"><div class="sr-title">${esc(label)}</div><div class="sr-help">${esc(help)}</div></div><div class="sr-control"><input class="settings-input" type="number" min="0" step="1" value="${esc(value ? value : '')}" placeholder="${esc(placeholder || '0')}" data-spend-config="${esc(key)}" aria-label="${esc(label)}"></div></div>`;
+}
+
+function spendAlertRow(config, key, icon, label, help) {
+  const on = !config.alerts || config.alerts[key] !== false;
+  return `<div class="settings-row"><span class="sr-ico">${svg(icon)}</span><div class="sr-main"><div class="sr-title">${esc(label)}</div><div class="sr-help">${esc(help)}</div></div><div class="sr-control"><label class="switch"><input type="checkbox" data-spend-alert="${esc(key)}" aria-label="${esc(label)}" ${on ? 'checked' : ''}><span class="switch-track"></span></label></div></div>`;
+}
+
+function spendEmpty(icon, title, body, action = '') {
+  return `<div class="spend-empty"><span class="spend-empty-ico">${svg(icon)}</span><strong>${esc(title)}</strong><span>${esc(body)}</span>${action}</div>`;
+}
+
 function diskTrendBody(series) {
   const samples = series && series.samples;
   if (!samples || samples.length < 3) {
@@ -2679,6 +2889,9 @@ function refreshAfterAction() {
       break;
     case 'ainews':
       loadAINews();
+      break;
+    case 'spend':
+      loadSpend();
       break;
     default:
       break;
@@ -4330,6 +4543,7 @@ const RENDERERS = {
   ollama: viewOllama,
   comfy: viewComfy,
   runtimes: viewRuntimes,
+  spend: viewSpend,
   agent: viewAgent,
   activity: viewActivity,
   ainews: viewAINews,
@@ -4364,6 +4578,7 @@ function renderNav() {
     const items = section.ids
       .map((id) => VIEWS.find((v) => v.id === id))
       .filter(Boolean)
+      .filter((v) => viewVisible(v.id))
       .filter(isAvailable)
       .map(navItem)
       .join('');
@@ -4374,6 +4589,7 @@ function renderNav() {
     const pinnedItems = pins
       .map((id) => VIEWS.find((v) => v.id === id))
       .filter(Boolean)
+      .filter((v) => viewVisible(v.id))
       .filter(isAvailable)
       .map(navItem)
       .join('');
@@ -4414,11 +4630,16 @@ function renderView() {
   }
   const view = VIEWS.find((v) => v.id === state.view) || VIEWS[0];
   const data = simulateData(state.data);
-  if (data && view.available && !view.available(data)) {
-    state.view = 'overview';
-    if (location.hash.replace(/^#/, '') !== 'overview') location.hash = 'overview';
-    renderNav();
-    return renderView();
+  const hidden = view.id !== 'settings' && !viewVisible(view.id);
+  const unavailable = data && view.available && !view.available(data);
+  if (hidden || unavailable) {
+    const next = fallbackView(data);
+    if (next && next !== view.id) {
+      state.view = next;
+      if (location.hash.replace(/^#/, '') !== next) location.hash = next;
+      renderNav();
+      return renderView();
+    }
   }
   resetRowCursor();
   els.viewTitle.textContent = view.title;
@@ -4426,9 +4647,11 @@ function renderView() {
     ? 'Live · processes every 2s'
     : view.id === 'network'
       ? 'Live · refresh every 5s'
-      : data?.generatedAt
-        ? `Scanned ${relativeTime(data.generatedAt)}`
-        : 'Loading inventory…';
+      : view.id === 'spend'
+        ? 'DeepSeek balance and spend'
+        : data?.generatedAt
+          ? `Scanned ${relativeTime(data.generatedAt)}`
+          : 'Loading inventory…';
 
   if (view.id !== 'services') stopLogFollow();
   if (view.id !== 'network') stopNetworkPolling();
@@ -4477,13 +4700,15 @@ function renderView() {
   if (view.id === 'activity') loadAgent();
   if (view.id === 'agent') renderOpenclawToggle();
   if (view.id === 'ainews') loadAINews();
+  if (view.id === 'spend') loadSpend();
 }
 
 function setView(id) {
   const target = VIEWS.find((v) => v.id === id);
   if (!target) return;
   const data = simulateData(state.data);
-  if (data && target.available && !target.available(data)) id = 'overview';
+  const unavailable = data && target.available && !target.available(data);
+  if (!viewVisible(id) || unavailable) id = fallbackView(data) || id;
   closePanel();
   state.view = id;
   if (location.hash.replace(/^#/, '') !== id) location.hash = id;
@@ -5038,7 +5263,7 @@ async function loadInventory() {
 const palette = { open: false, query: '', index: 0, results: [], asyncResults: [], token: 0 };
 
 function paletteBase(query) {
-  const commands = VIEWS.map((v) => ({
+  const commands = VIEWS.filter((v) => viewVisible(v.id)).map((v) => ({
     group: 'Navigate',
     id: `view:${v.id}`,
     label: v.label,
@@ -5508,7 +5733,7 @@ document.addEventListener('keydown', (event) => {
     return;
   }
   if ((event.metaKey || event.ctrlKey) && /^[1-9]$/.test(event.key)) {
-    const view = VIEWS[Number(event.key) - 1];
+    const view = visibleViews()[Number(event.key) - 1];
     if (view) {
       event.preventDefault();
       setView(view.id);
@@ -5606,6 +5831,63 @@ els.view.addEventListener('contextmenu', (event) => {
 els.view.addEventListener('click', (event) => {
   if (event.target.closest('#openclaw-toggle')) {
     toggleOpenclaw();
+    return;
+  }
+  const spendRefresh = event.target.closest('[data-spend-refresh]');
+  if (spendRefresh) {
+    withButtonState(spendRefresh, () => loadSpend(true));
+    return;
+  }
+  const openSettingsTarget = event.target.closest('[data-open-settings]');
+  if (openSettingsTarget) {
+    openSettings(openSettingsTarget.getAttribute('data-open-settings'));
+    return;
+  }
+  const spendAdd = event.target.closest('[data-spend-add]');
+  if (spendAdd) {
+    const form = spendAdd.closest('.spend-form') || els.view;
+    const amount = form.querySelector('[data-spend-amount]');
+    const note = form.querySelector('[data-spend-note]');
+    const kind = form.querySelector('[data-spend-kind]');
+    withButtonState(spendAdd, async () => {
+      const data = await api('/api/spend/entries', {
+        method: 'POST',
+        body: { amount: amount ? amount.value : '', note: note ? note.value : '', kind: kind ? kind.value : 'usage' },
+      });
+      spendState.data = data;
+      renderSpendSurfaces();
+      if (amount) amount.value = '';
+      if (note) note.value = '';
+      toast('Entry added', 'good');
+    });
+    return;
+  }
+  const spendRemove = event.target.closest('[data-spend-remove]');
+  if (spendRemove) {
+    withButtonState(spendRemove, async () => {
+      spendState.data = await api(`/api/spend/entries/${encodeURIComponent(spendRemove.getAttribute('data-spend-remove'))}`, { method: 'DELETE' });
+      renderSpendSurfaces();
+    });
+    return;
+  }
+  const spendConnect = event.target.closest('[data-spend-connect]');
+  if (spendConnect) {
+    const input = els.view.querySelector('[data-spend-key]');
+    withButtonState(spendConnect, async () => {
+      await api('/api/spend/config', { method: 'POST', body: { apiKey: input ? input.value : '' } });
+      if (input) input.value = '';
+      toast('DeepSeek connected', 'good');
+      await loadSpend(true);
+    });
+    return;
+  }
+  const spendDisconnect = event.target.closest('[data-spend-disconnect]');
+  if (spendDisconnect) {
+    withButtonState(spendDisconnect, async () => {
+      await api('/api/spend/config', { method: 'POST', body: {} });
+      toast('DeepSeek disconnected', 'good');
+      await loadSpend();
+    });
     return;
   }
   const rangeBtn = event.target.closest('[data-range]');
@@ -6189,6 +6471,17 @@ els.filter.addEventListener('input', () => {
 });
 
 els.view.addEventListener('change', (event) => {
+  const spendConfig = event.target.closest('[data-spend-config]');
+  if (spendConfig) {
+    const key = spendConfig.getAttribute('data-spend-config');
+    patchSpendConfig({ [key]: spendConfig.value === '' ? 0 : Number(spendConfig.value) });
+    return;
+  }
+  const spendAlert = event.target.closest('[data-spend-alert]');
+  if (spendAlert) {
+    patchSpendConfig({ alerts: { [spendAlert.getAttribute('data-spend-alert')]: spendAlert.checked } });
+    return;
+  }
   if (event.target.id === 'hf-dir') hfState.dir = event.target.value;
   if (event.target.closest('[data-brew-hidedeps]')) {
     brewState.hideDeps = event.target.checked;
@@ -7553,6 +7846,73 @@ function settingsAppearance() {
     ${settingsGroup('Motion', r('appearance.motion'))}`;
 }
 
+function settingsNavigation() {
+  const views = VIEWS.filter((v) => v.id !== 'settings');
+  const visibleCount = views.filter((v) => viewVisible(v.id)).length;
+  const rows = views
+    .map((v) => {
+      const on = viewVisible(v.id);
+      const locked = on && visibleCount <= 1;
+      const sub = v.title && v.title !== v.label ? v.title : null;
+      return `<div class="settings-row"><span class="sr-ico">${svg(v.icon)}</span><div class="sr-main"><div class="sr-title">${esc(v.label)}</div>${sub ? `<div class="sr-help">${esc(sub)}</div>` : ''}</div><div class="sr-control"><label class="switch"><input type="checkbox" data-setting-view="${esc(v.id)}" aria-label="Show ${esc(v.label)} section" ${on ? 'checked' : ''}${locked ? ' disabled' : ''}><span class="switch-track"></span></label></div></div>`;
+    })
+    .join('');
+  return `${settingsGroup(`Sections · ${visibleCount} of ${views.length} shown`, rows)}
+    <div class="settings-inline"><button class="btn small" data-settings-views-all>Show all sections</button></div>
+    <p class="settings-note">Turn a section off to keep the sidebar focused. Hidden sections stay reachable from Settings and are skipped by the command palette and shortcuts. At least one section must stay visible.</p>`;
+}
+
+function settingsCloudSpend() {
+  if (!spendState.data) {
+    if (!spendSettingsTried) loadSpendSettings();
+    return `<div class="settings-card">${skeletonRows(4)}</div>`;
+  }
+  const data = spendState.data;
+  const currency = data.currency || 'USD';
+  const config = data.config || { alerts: {} };
+  const readOnly = Boolean(state.session && state.session.readOnly);
+  const status = data.connected
+    ? data.lastError
+      ? pill('needs attention', 'warn')
+      : pill('connected', 'good')
+    : pill('not connected', '');
+  const connection = data.connected
+    ? `<div class="sr-value"><span class="mono">${esc(data.keyHint || '••••')}</span></div>${readOnly ? '' : '<button class="btn small danger" data-spend-disconnect>Disconnect</button>'}`
+    : readOnly
+      ? '<span class="sr-help">Read-only mode</span>'
+      : '<input class="settings-input" type="password" placeholder="sk-…" data-spend-key aria-label="DeepSeek API key" autocomplete="off"><button class="btn small primary" data-spend-connect>Connect</button>';
+  const errorRow = data.connected && data.lastError ? sInfoRow('warning', 'Last error', data.lastError, '') : '';
+  const budget = config.budget || 0;
+  const monthSpend = (data.spend && data.spend.month) || 0;
+  const budgetLine = budget > 0
+    ? `<div class="spend-budget">${spendBudgetBar(monthSpend, budget, config.budgetWarnPct || 80, currency)}</div>`
+    : '';
+  const sampleRow = sInfoRow(
+    'pulse',
+    'Balance samples',
+    data.sampleCount
+      ? `${data.sampleCount} recorded${data.sampledAt ? ` · last ${relativeTime(data.sampledAt)}` : ''}. Vantage samples every 30 minutes in the background.`
+      : 'None yet. Connect a key and Vantage will start sampling in the background.',
+    readOnly ? '' : `<button class="btn small" data-spend-refresh>${svg('restart')} Refresh now</button>`,
+  );
+  return `${settingsGroup('Connection',
+    sInfoRow('dollar', 'Provider', 'DeepSeek balance API.', `${pill('DeepSeek', 'accent')}${status}`) +
+    sInfoRow('key', 'API key', data.connected ? 'Stored locally on this Mac, used only to read your balance.' : 'Paste a key to sample your live balance. Stored locally on this Mac.', connection) +
+    errorRow
+  )}
+  ${readOnly ? '' : settingsGroup('Budget & alerts',
+    budgetLine +
+    spendNumberRow(config, 'budget', 'target', 'Monthly budget', 'Alert when spend approaches this. 0 turns it off.', '0') +
+    spendNumberRow(config, 'budgetWarnPct', 'bell', 'Warn at (%)', 'Notify at this share of the budget before it is exceeded.', '80') +
+    spendNumberRow(config, 'lowBalance', 'warning', 'Low-balance floor', 'Notify when the balance drops to or below this. 0 turns it off.', '0') +
+    spendAlertRow(config, 'topup', 'download', 'Top-up detected', 'Notify when the balance rises.') +
+    spendAlertRow(config, 'spike', 'pulse', 'Spend spikes', 'Notify when a day spends several times your typical rate.') +
+    spendAlertRow(config, 'error', 'key', 'Connection errors', 'Notify when DeepSeek rejects the key or is unreachable.')
+  )}
+  ${readOnly ? '' : settingsGroup('Background tracking', sampleRow)}
+  <p class="settings-note">The key is written to <span class="mono">data/spend.json</span> on this Mac and is only ever sent to DeepSeek’s balance endpoint. Alerts use your notification channels, so macOS, Telegram and Web Push settings all apply.</p>`;
+}
+
 function settingsNotifications() {
   const caps = settingsCaps();
   const r = (id) => settingRow(registryEntry(id), caps);
@@ -7675,6 +8035,8 @@ function settingsAbout() {
 function settingsSection(section) {
   if (section === 'general') return settingsGeneral();
   if (section === 'appearance') return settingsAppearance();
+  if (section === 'navigation') return settingsNavigation();
+  if (section === 'cloudspend') return settingsCloudSpend();
   if (section === 'notifications') return settingsNotifications();
   if (section === 'security') return settingsSecurity();
   if (section === 'capabilities') return settingsCapabilities();
@@ -7728,6 +8090,7 @@ function renderSettingsSection(direction = 'none') {
 function openSettings(section = settingsState.section || 'general') {
   if (state.view !== 'settings') settingsState.returnView = state.view;
   settingsState.section = section;
+  if (section === 'cloudspend') spendSettingsTried = false;
   if (state.view !== 'settings') setView('settings');
   else renderSettingsView();
   if (!settingsState.data || !settingsState.profile) loadSettingsData();
@@ -7920,6 +8283,24 @@ async function resetSettings(section) {
 
 els.view.addEventListener('click', (event) => {
   if (state.view !== 'settings') return;
+  const viewToggle = event.target.closest('[data-setting-view]');
+  if (viewToggle) {
+    const id = viewToggle.getAttribute('data-setting-view');
+    if (!setViewVisible(id, viewToggle.checked)) {
+      viewToggle.checked = true;
+      toast('Keep at least one section visible', 'error');
+      return;
+    }
+    renderNav();
+    renderSettingsSection();
+    return;
+  }
+  if (event.target.closest('[data-settings-views-all]')) {
+    setPref('views', {});
+    renderNav();
+    renderSettingsSection();
+    return;
+  }
   const accent = event.target.closest('[data-setting-accent]');
   if (accent) {
     const name = accent.getAttribute('data-setting-accent');
@@ -7944,6 +8325,7 @@ els.view.addEventListener('click', (event) => {
     const ids = (settingsState.data.sections || []).map((s) => s.id);
     const from = ids.indexOf(settingsState.section);
     settingsState.section = nav.getAttribute('data-settings-nav');
+    if (settingsState.section === 'cloudspend') spendSettingsTried = false;
     renderSettingsSection(ids.indexOf(settingsState.section) >= from ? 'forward' : 'back');
     return;
   }

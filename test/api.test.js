@@ -4,9 +4,14 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const os = require('node:os');
+const fs = require('node:fs');
 
 const PORT = 8792;
 const BASE = `http://127.0.0.1:${PORT}`;
+// Never run the real server against the developer's data/ directory: point it at
+// a throwaway dir so tests can't create or delete real settings, keys or caches.
+const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'vantage-api-'));
 let child;
 
 async function waitForHealth(timeoutMs = 25_000) {
@@ -25,7 +30,7 @@ async function waitForHealth(timeoutMs = 25_000) {
 
 test.before(async () => {
   child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
-    env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1' },
+    env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', VANTAGE_DATA_DIR: TMP },
     stdio: 'ignore',
   });
   assert.ok(await waitForHealth(), 'server should start and answer /api/health');
@@ -33,6 +38,7 @@ test.before(async () => {
 
 test.after(() => {
   if (child) child.kill('SIGKILL');
+  fs.rmSync(TMP, { recursive: true, force: true });
 });
 
 test('health and inventory respond', async () => {
@@ -75,4 +81,34 @@ test('homebrew inventory exposes rich packages', async () => {
     assert.ok(['formula', 'cask'].includes(sample.kind));
     assert.ok('reason' in sample && 'installed' in sample);
   }
+});
+
+test('cloud spend reports state and gates mutations behind the token', async () => {
+  const report = await fetch(`${BASE}/api/spend`).then((r) => r.json());
+  assert.equal(report.provider, 'deepseek');
+  assert.equal(typeof report.connected, 'boolean');
+  assert.ok(report.spend && typeof report.spend.total === 'number');
+  assert.ok(Array.isArray(report.ledger.entries));
+
+  const unauth = await fetch(`${BASE}/api/spend/entries`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ amount: 3 }),
+  });
+  assert.equal(unauth.status, 403);
+
+  const { token } = await fetch(`${BASE}/api/session`).then((r) => r.json());
+  const added = await fetch(`${BASE}/api/spend/entries`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-dashboard-token': token },
+    body: JSON.stringify({ amount: 3, kind: 'usage', note: 'api test' }),
+  }).then((r) => r.json());
+  const entry = added.ledger.entries.find((item) => item.note === 'api test');
+  assert.ok(entry, 'entry is stored');
+
+  const removed = await fetch(`${BASE}/api/spend/entries/${entry.id}`, {
+    method: 'DELETE',
+    headers: { 'x-dashboard-token': token },
+  }).then((r) => r.json());
+  assert.equal(removed.ledger.entries.some((item) => item.id === entry.id), false);
 });

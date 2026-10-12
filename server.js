@@ -60,6 +60,8 @@ const diag = require('./lib/diag');
 const webauthn = require('./lib/webauthn');
 const push = require('./lib/push');
 const settings = require('./lib/settings');
+const spend = require('./lib/spend');
+spend.setNotifier((key, title, body) => notify.notify(key, title, body));
 const onboarding = require('./lib/onboarding');
 const setup = require('./lib/setup');
 const update = require('./lib/update');
@@ -495,6 +497,37 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/overview') {
       return sendJson(res, 200, await cache.memo('overview', 0, async () => overview.report(state.data || {}, metrics.getModelUsage(), await notify.loadSettings())));
+    }
+
+    if (pathname === '/api/spend') {
+      if (!READ_ONLY) spend.sampleIfDue().catch(() => {});
+      return sendJson(res, 200, await spend.report());
+    }
+
+    if (pathname === '/api/spend/refresh' && req.method === 'POST') {
+      if (READ_ONLY) return sendJson(res, 403, { error: 'Dashboard is in read-only mode' });
+      if (!authorized(req)) return sendJson(res, 403, { error: 'Forbidden' });
+      return sendJson(res, 200, await spend.refresh({ force: true }));
+    }
+
+    if (pathname === '/api/spend/config' && req.method === 'POST') {
+      if (READ_ONLY) return sendJson(res, 403, { error: 'Dashboard is in read-only mode' });
+      if (!authorized(req)) return sendJson(res, 403, { error: 'Forbidden' });
+      const body = await readBody(req);
+      if (body && body.config) return sendJson(res, 200, await spend.setConfig(body.config));
+      return sendJson(res, 200, body && body.apiKey ? await spend.setKey(body.apiKey) : await spend.clearKey());
+    }
+
+    if (pathname === '/api/spend/entries' && req.method === 'POST') {
+      if (READ_ONLY) return sendJson(res, 403, { error: 'Dashboard is in read-only mode' });
+      if (!authorized(req)) return sendJson(res, 403, { error: 'Forbidden' });
+      return sendJson(res, 200, await spend.addEntry(await readBody(req)));
+    }
+
+    if (pathname.startsWith('/api/spend/entries/') && req.method === 'DELETE') {
+      if (READ_ONLY) return sendJson(res, 403, { error: 'Dashboard is in read-only mode' });
+      if (!authorized(req)) return sendJson(res, 403, { error: 'Forbidden' });
+      return sendJson(res, 200, await spend.removeEntry(pathname.slice('/api/spend/entries/'.length)));
     }
 
     if (pathname === '/api/comfy/analysis') {
@@ -1013,6 +1046,13 @@ server.listen(PORT, HOST, async () => {
     console.log(`Metrics sampler started (${metrics.intervalMs / 1000}s, ${metrics.countSamples()} samples stored)`);
   } catch (error) {
     console.error('[metrics] failed to start sampler:', error.message);
+  }
+
+  // Cloud spend: sample the DeepSeek balance on a schedule so tracking (and
+  // budget/low-balance alerts) continues with the dashboard closed.
+  if (!READ_ONLY) {
+    setInterval(() => { spend.sampleIfDue().catch(() => {}); }, 5 * 60 * 1000).unref();
+    spend.sampleIfDue().catch(() => {});
   }
 
   async function buildDigest() {

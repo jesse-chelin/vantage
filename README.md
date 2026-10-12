@@ -39,7 +39,8 @@ Loopback-only · zero dependencies · nothing leaves your machine.
 Plus **Overview** (health, attention items, quick actions), **Monitor** (live CPU,
 memory, disk and network charts), **Network** (throughput, connections, ping/port
 diagnostics), **Security** (exposure, posture, tunnels), **Applications**,
-**Packages**, **Homebrew**, **Store**, **Agent Stack**, and **Activity**.
+**Packages**, **Homebrew**, **Store**, **Agent Stack**, **Cloud Spend** (DeepSeek
+balance and spend) and **Activity**.
 
 ## Install
 
@@ -97,9 +98,26 @@ grouped by type onto their own short steps; each is listed with its current
 state and what it is for, and requested only when you click Grant.
 
 **Settings** is a full surface of its own (sidebar, `⌘,`) covering General,
-Appearance (with a live preview), Notifications, Security, Capabilities, Data,
-Advanced and About. Every row shows its state and either fixes itself or opens
-the exact System Settings pane.
+Appearance, Navigation, Cloud spend, Notifications, Security, Capabilities, Data,
+Advanced and About. Every row shows its state and either fixes itself or opens the
+exact System Settings pane. **Navigation** shows or hides each sidebar section;
+hidden sections leave the sidebar and are skipped by the command palette and
+shortcuts, but stay reachable from Settings. **Cloud spend** is where the
+DeepSeek API key, budget and alerts live.
+
+## Cloud spend
+
+**Cloud Spend** tracks frontier AI cloud billing, starting with DeepSeek. Add a
+DeepSeek API key in **Settings → Cloud spend**; the server then samples your
+balance on a schedule (every 30 minutes) so tracking and alerts continue even
+with the dashboard closed. Spend is derived from the drops between balance
+samples, with top-ups counted separately, and the page shows a burn rate, a
+month-end projection and how long the balance lasts. Set a monthly budget, a
+low-balance floor and per-event alerts (budget, low balance, top-ups, spend
+spikes, connection errors) and they are delivered through your existing macOS,
+Telegram and Web Push channels. Without a key it falls back to a local manual
+ledger you can add to from the page. The key and data live in `data/spend.json`
+and only the masked key hint is ever returned to the browser.
 
 ## Notifications
 
@@ -156,6 +174,9 @@ Linear-inspired, dark-first, keyboard-driven.
 | `GET` | `/api/disk/tree?path=` · `/api/reclaim` | Disk tree / reclaimable |
 | `GET` | `/api/health/checks` · `/api/logs` · `/api/logs/tail` | Health & logs |
 | `GET` | `/api/security` · `/api/network` · `/api/network/ping` · `/api/network/port` | Security & network |
+| `GET` | `/api/spend` | Cloud spend (DeepSeek balance, samples, ledger) |
+| `POST` | `/api/spend/refresh` · `/api/spend/config` · `/api/spend/entries` | Refresh balance / set key or budget / add ledger entry |
+| `DELETE` | `/api/spend/entries/:id` | Remove a ledger entry |
 | `GET`/`POST` | `/api/notify` · `/api/notify/test` | Notification settings |
 | `GET`/`POST` | `/api/webauthn/*` | Touch ID: status, register, assert, native key |
 | `GET`/`POST` | `/api/push/*` | Web Push subscribe / status / test |
