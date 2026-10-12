@@ -40,7 +40,8 @@ Plus **Overview** (health, attention items, quick actions), **Monitor** (live CP
 memory, disk and network charts), **Network** (throughput, connections, ping/port
 diagnostics), **Security** (exposure, posture, tunnels), **Applications**,
 **Packages**, **Homebrew**, **Store**, **Agent Stack**, **Cloud Spend** (DeepSeek
-balance and spend) and **Activity**.
+balance and spend), **Changelog** (friendly release notes per version) and
+**Activity**.
 
 ## Install
 
@@ -128,20 +129,25 @@ and only the masked key hint is ever returned to the browser.
 ## Changelog
 
 Every release is documented in [`CHANGELOG.md`](CHANGELOG.md), generated from the
-git history and grouped into Added / Changed / Fixed / Removed / Security /
-Performance / Documentation. Regenerate it any time with:
+git history and grouped into friendly categories (New features / Enhancements /
+Fixes / Performance / Security / Removed / Documentation). Regenerate it any time
+with:
 
 ```sh
 npm run changelog          # writes CHANGELOG.md
 node bin/changelog.js --stdout   # preview without writing
 ```
 
-The same data is available in the app under **Settings → About → What's new**,
-and the updating overlay lists the commits it just pulled.
+The same data is a first-class section in the app (**Changelog**, in the sidebar
+and the ⌘K palette), shown per version, newest first, with the running version
+marked "installed". Because every tagged version gets its own section, jumping
+across several releases lists all of them, not just the newest. After an update
+the overlay summarises the pulled changes by category and points you there.
 
-Releases are cut by pushing a version tag. A GitHub Action then publishes a
-GitHub Release whose notes are generated from that tag's commits (tags with a
-hyphen, like `v0.9.0-beta`, are marked as pre-releases):
+Releases are cut by pushing a version tag — the tag is what defines a version in
+the changelog. A GitHub Action then publishes a GitHub Release whose notes are
+generated from that tag's commits (tags with a hyphen, like `v0.9.0-beta`, are
+marked as pre-releases):
 
 ```sh
 git tag v0.9.1 && git push origin v0.9.1

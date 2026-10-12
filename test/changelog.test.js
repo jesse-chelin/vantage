@@ -58,3 +58,20 @@ test('changelog.toMarkdownSection tolerates a release with no entries', () => {
   const markdown = changelog.toMarkdownSection({ version: 'v3.0.0', groups: [] });
   assert.match(markdown, /_No notable changes\._/);
 });
+
+test('changelog groups use friendly, user-facing labels', () => {
+  const labels = changelog.GROUPS.map((group) => group.label);
+  assert.ok(labels.includes('New features'), 'expected a "New features" group');
+  assert.ok(labels.includes('Enhancements'), 'expected an "Enhancements" group');
+  assert.ok(labels.includes('Fixes'), 'expected a "Fixes" group');
+});
+
+test('changelog.report flags the latest and running versions', async () => {
+  const data = await changelog.report();
+  assert.ok(data.sections.length >= 1);
+  assert.equal(data.sections[0].latest, true, 'newest section is flagged latest');
+  for (const section of data.sections) {
+    assert.equal(typeof section.latest, 'boolean');
+    assert.equal(typeof section.current, 'boolean');
+  }
+});

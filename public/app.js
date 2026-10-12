@@ -511,6 +511,7 @@ const VIEWS = [
   { id: 'agent', label: 'Agent Stack', icon: 'bot', title: 'Agent Stack', available: (d) => Boolean(d.agentStack && !d.agentStack.error && d.agentStack.openclaw) },
   { id: 'activity', label: 'Activity', icon: 'history', title: 'Agent Activity', available: (d) => Boolean(d.agentStack && !d.agentStack.error && d.agentStack.openclaw) },
   { id: 'ainews', label: 'AI News', icon: 'sparkle', title: 'AI News' },
+  { id: 'changelog', label: 'Changelog', icon: 'sparkle', title: 'Changelog' },
   { id: 'history', label: 'History', icon: 'history', title: 'Action History' },
   { id: 'settings', label: 'Settings', icon: 'gears', title: 'Settings' },
 ];
@@ -519,7 +520,7 @@ const NAV_SECTIONS = [
   { label: 'General', ids: ['overview', 'setup', 'monitor', 'storage', 'network', 'services', 'security', 'notify'] },
   { label: 'Manage', ids: ['brew', 'apps', 'packages', 'store', 'maintenance'] },
   { label: 'AI', ids: ['ollama', 'comfy', 'runtimes', 'spend', 'agent', 'activity', 'ainews'] },
-  { label: 'System', ids: ['history'] },
+  { label: 'System', ids: ['changelog', 'history'] },
 ];
 
 // --- optional components & empty states ------------------------------------
@@ -2890,6 +2891,9 @@ function refreshAfterAction() {
     case 'ainews':
       loadAINews();
       break;
+    case 'changelog':
+      loadChangelog();
+      break;
     case 'spend':
       loadSpend();
       break;
@@ -4549,6 +4553,7 @@ const RENDERERS = {
   ainews: viewAINews,
   services: viewServices,
   network: viewNetwork,
+  changelog: viewChangelog,
   history: viewHistory,
   brew: viewBrew,
   store: viewStore,
@@ -4701,6 +4706,7 @@ function renderView() {
   if (view.id === 'agent') renderOpenclawToggle();
   if (view.id === 'ainews') loadAINews();
   if (view.id === 'spend') loadSpend();
+  if (view.id === 'changelog') loadChangelog();
 }
 
 function setView(id) {
@@ -5283,6 +5289,7 @@ function paletteBase(query) {
     commands.push({ group: 'Actions', id: 'action:openclaw', label: openclawInfo && openclawInfo.paused ? 'Resume OpenClaw' : 'Pause OpenClaw', icon: 'bot', run: () => toggleOpenclaw() });
   }
   commands.push({ group: 'Actions', id: 'action:shortcuts', label: 'Keyboard shortcuts', icon: 'bolt', run: () => showShortcuts() });
+  commands.push({ group: 'Actions', id: 'action:changelog', label: 'What\'s new / changelog', icon: 'sparkle', run: () => setView('changelog') });
   commands.push({ group: 'Actions', id: 'action:settings', label: 'Open settings', icon: 'gears', run: () => openSettings('general') });
   commands.push({ group: 'Capabilities', id: 'cap:install', label: 'Install Vantage as an app', icon: 'app', run: () => promptInstall() });
   commands.push({ group: 'Capabilities', id: 'cap:notify', label: 'Enable browser notifications', icon: 'bell', run: () => enableBrowserNotifications() });
@@ -7708,10 +7715,8 @@ async function applyUpdate() {
   if (result.commits && result.commits.length) {
     const box = els.modalRoot && els.modalRoot.querySelector('[data-update-changes]');
     if (box) {
-      const shown = result.commits.slice(0, 6);
-      const more = result.commits.length - shown.length;
       box.hidden = false;
-      box.innerHTML = `<div class="uc-title">What's new</div><ul>${shown.map((c) => `<li><span>${esc(c.subject)}</span><code class="mono">${esc(c.hash)}</code></li>`).join('')}</ul>${more > 0 ? `<div class="uc-more">+${more} more</div>` : ''}`;
+      box.innerHTML = await updateChangesHtml(result.commits);
     }
   }
   setUpdateStep('restart', 'active');
@@ -7738,33 +7743,77 @@ async function applyUpdate() {
   location.reload();
 }
 
+async function updateChangesHtml(commits) {
+  const fallback = () => {
+    const shown = commits.slice(0, 6);
+    const more = commits.length - shown.length;
+    return `<div class="uc-title">What's new</div><ul>${shown.map((c) => `<li><span>${esc(c.subject)}</span><code class="mono">${esc(c.hash)}</code></li>`).join('')}</ul>${more > 0 ? `<div class="uc-more">+${more} more</div>` : ''}`;
+  };
+  try {
+    const data = await api('/api/changelog');
+    changelogCache = data;
+    const hashes = new Set(commits.map((c) => c.hash));
+    const counts = [];
+    for (const section of data.sections || []) {
+      for (const group of section.groups || []) {
+        const count = (group.entries || []).filter((entry) => hashes.has(entry.hash)).length;
+        if (count) counts.push({ label: group.label, icon: group.icon, count });
+      }
+    }
+    if (counts.length) {
+      return `<div class="uc-title">What's new</div><div class="uc-groups">${counts.map((c) => `<span class="uc-group">${svg(c.icon)}${esc(c.label)} <b>${c.count}</b></span>`).join('')}</div><div class="uc-more">Open the Changelog for the full list.</div>`;
+    }
+  } catch {
+    /* fall back to the raw commit list */
+  }
+  return fallback();
+}
+
+function changelogSectionCard(section, repoUrl) {
+  const badges = [
+    section.unreleased ? pill('unreleased', 'accent') : '',
+    section.current ? pill('installed', 'good') : '',
+    section.latest && !section.unreleased && !section.current ? pill('latest', 'accent') : '',
+  ].join('');
+  const groups = section.groups.map((group) => `
+    <div class="changelog-group">
+      <div class="changelog-group-title">${svg(group.icon)}<span>${esc(group.label)}</span><span class="changelog-count">${group.entries.length}</span></div>
+      <ul class="changelog-list">
+        ${group.entries.map((entry) => `<li>${entry.scope ? `<span class="changelog-scope">${esc(entry.scope)}</span>` : ''}<span>${esc(entry.text)}</span>${entry.hash ? `<a class="changelog-hash mono" href="${esc(repoUrl || '')}/commit/${esc(entry.hash)}" target="_blank" rel="noopener">${esc(entry.hash)}</a>` : ''}</li>`).join('')}
+      </ul>
+    </div>`).join('');
+  return `<div class="card changelog-card"><div class="changelog-section">
+    <div class="changelog-head">
+      <span class="changelog-version">${esc(section.version)}</span>
+      ${badges}
+      <span class="changelog-date">${esc(section.date || '')}</span>
+    </div>
+    <div class="changelog-meta">${section.count} change${section.count === 1 ? '' : 's'}</div>
+    ${groups}
+  </div></div>`;
+}
+
 function changelogBody(data) {
   const sections = (data && data.sections) || [];
   if (!sections.length) return `<div class="empty-note">No changes recorded yet.</div>`;
-  return `<div class="changelog">${sections.map((section) => `
-    <div class="changelog-section">
-      <div class="changelog-head">
-        <span class="changelog-version">${esc(section.version)}</span>
-        ${section.unreleased ? '<span class="pill accent">unreleased</span>' : ''}
-        ${section.date ? `<span class="changelog-date">${esc(section.date)}</span>` : ''}
-      </div>
-      ${section.groups.map((group) => `
-        <div class="changelog-group">
-          <div class="changelog-group-title">${svg(group.icon)}<span>${esc(group.label)}</span><span class="changelog-count">${group.entries.length}</span></div>
-          <ul class="changelog-list">
-            ${group.entries.map((entry) => `<li>${entry.scope ? `<span class="changelog-scope">${esc(entry.scope)}</span>` : ''}<span>${esc(entry.text)}</span><a class="changelog-hash mono" href="${esc(data.repoUrl || '')}/commit/${esc(entry.hash)}" target="_blank" rel="noopener">${esc(entry.hash)}</a></li>`).join('')}
-          </ul>
-        </div>`).join('')}
-    </div>`).join('')}</div>`;
+  return `<p class="changelog-intro">Everything that shipped in each release, newest first. Every version is listed, so nothing is missed when an update skips a few.</p>
+    <div class="changelog">${sections.map((section) => changelogSectionCard(section, data.repoUrl)).join('')}</div>`;
 }
 
-async function openChangelog() {
-  openPanel({ title: "What's new", subtitle: 'Changes to Vantage', body: skeletonRows(5) });
+let changelogCache = null;
+
+function viewChangelog() {
+  return `<div id="changelog-root">${skeletonRows(6)}</div>`;
+}
+
+async function loadChangelog(force = false) {
+  const host = document.getElementById('changelog-root');
+  if (!host) return;
   try {
-    const data = await api('/api/changelog');
-    openPanel({ title: "What's new", subtitle: `${versionLabel()} · generated from git history`, body: changelogBody(data) });
+    if (!changelogCache || force) changelogCache = await api('/api/changelog');
+    host.innerHTML = changelogBody(changelogCache);
   } catch (error) {
-    openPanel({ title: "What's new", subtitle: 'Error', body: `<div class="empty-note">${esc(error.message)}</div>` });
+    host.innerHTML = `<div class="empty-note">Could not load the changelog: ${esc(error.message)}</div>`;
   }
 }
 
@@ -8023,7 +8072,7 @@ function settingsAbout() {
   )}
   ${settingsGroup('Updates',
     sInfoRow('download', 'Vantage updates', updateSub, statusControl) +
-    sInfoRow('sparkle', "What's new", 'Auto-generated changelog from the git history.', '<button class="btn small" data-settings-changelog>View</button>')
+    sInfoRow('sparkle', 'Changelog', 'Friendly release notes for every version, newest first.', '<button class="btn small" data-goto="changelog">View</button>')
   )}
   ${settingsGroup('Links',
     sInfoRow('link', 'Repository', 'jesse-chelin/vantage', '<button class="btn small" data-settings-repo>Open</button>') +
@@ -8366,7 +8415,6 @@ els.view.addEventListener('click', (event) => {
   if (event.target.closest('[data-settings-releases]')) { window.open('https://github.com/jesse-chelin/vantage/releases'); return; }
   if (event.target.closest('[data-settings-check]')) { checkForUpdate(true); return; }
   if (event.target.closest('[data-settings-update]')) { applyUpdate(); return; }
-  if (event.target.closest('[data-settings-changelog]')) { openChangelog(); return; }
   if (event.target.closest('[data-settings-export]')) return exportSettings();
   if (event.target.closest('[data-settings-import]')) return importSettings();
   const reset = event.target.closest('[data-settings-reset]');
