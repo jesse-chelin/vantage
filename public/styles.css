@@ -1169,7 +1169,8 @@ body.nav-open .nav-scrim { opacity: 1; visibility: visible; }
 .cmd-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px 6px 11px; font-size: 11px; color: var(--text-3); border-bottom: 1px solid var(--border); }
 .cmd-block code { display: block; padding: 11px 12px; font-family: var(--mono); font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
 .cmd-note { padding: 0 12px 11px; font-size: 11px; color: var(--text-3); }
-.detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.detail-actions { display: flex; gap: 8px; flex-wrap: wrap; padding: 14px 16px; border-top: 1px solid var(--border); }
+.detail-sec .detail-actions { padding: 0; border-top: none; margin-top: 12px; }
 .status-bar { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 7px 4px; font-size: 11.5px; color: var(--text-3); }
 .status-dot.amber { background: var(--orange); }
 

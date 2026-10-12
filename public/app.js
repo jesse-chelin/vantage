@@ -1690,7 +1690,8 @@ function packageDetailShell(title, subtitle, body, actions) {
       <div class="detail-icon">${svg('cube')}</div>
       <div class="detail-title"><h2>${esc(title)}</h2><p>${esc(subtitle)}</p></div>
     </div>
-    <div class="detail-scroll">${body}<div class="detail-actions">${actions}</div></div>`;
+    <div class="detail-scroll">${body}</div>
+    <div class="detail-actions">${actions}</div>`;
 }
 
 function renderPackagesList() {
