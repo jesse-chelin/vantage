@@ -4795,14 +4795,20 @@ async function refreshSession() {
   }
 }
 
-async function api(path, { method = 'GET', body } = {}) {
+async function api(path, { method = 'GET', body, timeout = 0 } = {}) {
   const attempt = async () => {
     const headers = {};
     if (body !== undefined) headers['content-type'] = 'application/json';
     if (method !== 'GET') headers['x-dashboard-token'] = state.session.token;
-    const response = await fetch(path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
-    const data = await response.json().catch(() => ({}));
-    return { response, data };
+    const controller = timeout ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), timeout) : null;
+    try {
+      const response = await fetch(path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal: controller ? controller.signal : undefined });
+      const data = await response.json().catch(() => ({}));
+      return { response, data };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   };
 
   let { response, data } = await attempt();
@@ -5235,7 +5241,7 @@ async function runAction(id, params, triggerEl) {
   }
 
   markBusy(triggerEl);
-  const send = (grant) => api(`/api/actions/${id}`, { method: 'POST', body: grant ? { ...params, webauthnGrant: grant } : params });
+  const send = (grant) => api(`/api/actions/${id}`, { method: 'POST', body: grant ? { ...params, webauthnGrant: grant } : params, timeout: 180_000 });
   try {
     let result;
     try {
@@ -5263,7 +5269,11 @@ async function runAction(id, params, triggerEl) {
     }
   } catch (error) {
     markError(triggerEl, error.message);
-    toast(error.message, 'error');
+    if (error.name === 'AbortError') {
+      toast('Timed out waiting for the server. The action may still be running — check History.', 'error');
+    } else {
+      toast(error.message, 'error');
+    }
   }
 }
 

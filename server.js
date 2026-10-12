@@ -1039,8 +1039,12 @@ const server = http.createServer(async (req, res) => {
     return serveStatic(res, pathname);
   } catch (error) {
     const status = error && error.status ? error.status : 500;
-    // Touch ID failures are the hardest to diagnose from the browser alone, so
-    // record the exact reason (visible under Settings → Advanced → Diagnostics).
+    // Failures that are hard to diagnose from the browser alone (Touch ID
+    // ceremonies and management actions) are recorded so they show up under
+    // Settings → Advanced → Diagnostics instead of vanishing into a toast.
+    if (status >= 400 && error && error.message && pathname.startsWith('/api/actions')) {
+      console.warn(`[action] ${pathname} -> ${status} ${error.message}`);
+    }
     if (status >= 400 && error && error.message && (pathname.startsWith('/api/webauthn') || /touch id/i.test(error.message))) {
       console.warn(`[webauthn] ${req.method} ${pathname} -> ${status} ${error.message}`);
     }
