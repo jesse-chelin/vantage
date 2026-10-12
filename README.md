@@ -150,14 +150,17 @@ until a release is cut. `npm run release` does the whole thing for you: bumps th
 version, tags it, refreshes the changelog, and (with `--push`) pushes both:
 
 ```sh
-npm run release patch          # 0.9.0-beta -> 0.9.1-beta
-npm run release minor           # 0.9.0-beta -> 0.10.0-beta
-npm run release major           # 0.9.0-beta -> 1.0.0-beta
-npm run release stable          # 0.9.0-beta -> 0.9.0
-npm run release 0.10.0-rc.1     # explicit version
-npm run release minor --push    # publish (push branch + tag)
-npm run release minor --dry-run # preview without writing
+npm run release patch             # 0.9.0-beta -> 0.9.1-beta
+npm run release minor             # 0.9.0-beta -> 0.10.0-beta
+npm run release major             # 0.9.0-beta -> 1.0.0-beta
+npm run release stable            # 0.9.0-beta -> 0.9.0
+npm run release 0.10.0-rc.1       # explicit version
+npm run release -- minor --push   # publish (push branch + tag)
+npm run release -- minor --dry-run
 ```
+
+(Flags after the script need `--` so npm forwards them; or call the script
+directly: `node bin/release.js minor --push`.)
 
 It runs the test suite first, refuses a dirty tree or an existing tag, and keeps
 a prerelease suffix on bumps (`--stable` drops it, `--pre <tag>` sets it). The
