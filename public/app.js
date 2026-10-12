@@ -1431,13 +1431,13 @@ function appsShell() {
   const totalSize = apps.reduce((sum, a) => sum + (a.bytes || 0), 0);
   const seg = (value, label, n) => `<button class="seg${appsState.filter === value ? ' active' : ''}" data-apps-filter="${value}">${label}<span class="seg-count">${fmtNum(n)}</span></button>`;
   return `
-    <div class="split">
+    <div class="split split-apps">
+      <div class="split-controls apps-controls">
+        <div class="segmented">${seg('all', 'All', apps.length)}${seg('system', 'Applications', sysCount)}${seg('user', 'User', userCount)}</div>
+        <input id="apps-search" class="row-input apps-search" placeholder="Search applications…" autocomplete="off" spellcheck="false" value="${esc(appsState.query)}" />
+        <span class="apps-total faint">${fmtBytes(totalSize)} total</span>
+      </div>
       <div class="split-list">
-        <div class="split-controls">
-          <div class="segmented">${seg('all', 'All', apps.length)}${seg('system', 'Applications', sysCount)}${seg('user', 'User', userCount)}</div>
-          <span class="faint" style="font-size:11.5px">${fmtBytes(totalSize)} total</span>
-        </div>
-        <input id="apps-search" class="row-input brew-search" placeholder="Search applications…" autocomplete="off" spellcheck="false" value="${esc(appsState.query)}" />
         <div class="list" id="apps-list">${appRowsHtml()}</div>
       </div>
       <aside class="split-detail" id="apps-detail"><div class="empty-note">Select an application to see its details.</div></aside>
