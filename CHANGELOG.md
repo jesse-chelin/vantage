@@ -3,10 +3,11 @@
 All notable changes to Vantage are documented here.
 This file is generated from the git history. Refresh it with `npm run changelog`.
 
-## Unreleased (2026-10-12)
+## v0.10.0-beta (2026-10-12)
 
 ### New features
 
+- Add `npm run release` to version, tag and refresh the changelog ([5aba8c4](https://github.com/jesse-chelin/vantage/commit/5aba8c4))
 - Add a friendly per-version Changelog section ([798386b](https://github.com/jesse-chelin/vantage/commit/798386b))
 - Track DeepSeek cloud spend and add section visibility settings ([c9a9dfe](https://github.com/jesse-chelin/vantage/commit/c9a9dfe))
 - Add agent backlog: structured store, CLI, worker agent and command ([b6bc51f](https://github.com/jesse-chelin/vantage/commit/b6bc51f))
