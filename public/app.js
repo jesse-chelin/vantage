@@ -5204,10 +5204,11 @@ function addJob(jobId, actionId, params) {
       <button class="btn small plain" data-job-log>Log</button>
       <button class="btn small plain" data-job-close>${svg('xmark')}</button>
     </div>
+    <ul class="job-steps update-steps" hidden></ul>
     <div class="job-log" style="display:none"></div>`;
   els.jobDock.prepend(el);
 
-  const entry = { id: jobId, actionId, params, cursor: 0, status: 'running', el, logEl: el.querySelector('.job-log'), spinner: el.querySelector('.spinner') };
+  const entry = { id: jobId, actionId, params, cursor: 0, status: 'running', el, stepsEl: el.querySelector('.job-steps'), logEl: el.querySelector('.job-log'), spinner: el.querySelector('.spinner') };
   state.jobs.set(jobId, entry);
   syncWakeLock();
   syncBadge();
@@ -5221,6 +5222,12 @@ function addJob(jobId, actionId, params) {
   pollJob(jobId);
 }
 
+function jobStepHtml(step) {
+  const mark = step.status === 'done' ? svg('check') : step.status === 'failed' ? svg('warning') : svg('chevron');
+  const detail = step.detail ? `<span class="us-detail">${esc(step.detail)}</span>` : '';
+  return `<li class="update-step" data-state="${esc(step.status || 'active')}"><span class="us-mark">${mark}</span><span class="us-label">${esc(step.label || '')}</span>${detail}</li>`;
+}
+
 async function pollJob(jobId) {
   const entry = state.jobs.get(jobId);
   if (!entry) return;
@@ -5230,6 +5237,10 @@ async function pollJob(jobId) {
   } catch {
     setTimeout(() => pollJob(jobId), 2000);
     return;
+  }
+  if (payload.steps && payload.steps.length) {
+    entry.stepsEl.hidden = false;
+    entry.stepsEl.innerHTML = payload.steps.map(jobStepHtml).join('');
   }
   if (payload.output?.length) {
     entry.logEl.textContent += payload.output.join('\n') + '\n';
@@ -5518,12 +5529,34 @@ function scheduleScan(delay = 800) {
 }
 
 async function triggerScan() {
+  if (!scanState.card) {
+    scanState.card = taskToast({ title: 'Rescanning this Mac', subtitle: 'Starting…' });
+  }
   try {
     await api('/api/scan', { method: 'POST' });
   } catch {
     /* poll surfaces errors */
   }
   loadInventory();
+}
+
+const scanState = { card: null };
+
+function updateScanCard(payload) {
+  const card = scanState.card;
+  if (!card) return;
+  if (Array.isArray(payload.steps)) {
+    for (const step of payload.steps) card.step({ id: step.label, label: step.label, status: step.status });
+  }
+  if (payload.progress) card.subtitle(payload.progress);
+}
+
+function finishScanCard(payload) {
+  const card = scanState.card;
+  if (!card) return;
+  scanState.card = null;
+  if (payload.error) card.finish({ ok: false, message: 'Scan failed — see Diagnostics' });
+  else card.finish({ ok: true, message: payload.durationMs ? `Scanned in ${(payload.durationMs / 1000).toFixed(1)}s` : 'Everything is up to date' });
 }
 
 async function loadInventory() {
@@ -5540,10 +5573,12 @@ async function loadInventory() {
     if (payload.scanning) {
       setScanStatus(payload.progress ? `${payload.progress}…` : 'Scanning…', true);
       els.refresh.disabled = true;
+      updateScanCard(payload);
       setTimeout(loadInventory, 1500);
     } else {
       els.refresh.disabled = false;
       setScanStatus(payload.generatedAt ? `Updated ${relativeTime(payload.generatedAt)}` : 'Idle', false);
+      finishScanCard(payload);
       if (pendingScanButtons.size) {
         for (const el of pendingScanButtons) (payload.error ? markError(el, payload.error) : markSuccess(el));
         pendingScanButtons.clear();

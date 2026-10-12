@@ -979,6 +979,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 .job-head { display: flex; align-items: center; gap: 9px; padding: 10px 12px; }
 .job-head .job-name { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .job-log { font-family: var(--mono); font-size: 11px; line-height: 1.55; color: var(--text-2); background: var(--bg); max-height: 150px; overflow-y: auto; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; border-top: 1px solid var(--border); }
+.job-steps { padding: 0 12px 10px; }
+.job-steps[hidden] { display: none; }
+.job-steps .update-step { padding: 6px 8px; }
 
 /* Command palette --------------------------------------------------------- */
 

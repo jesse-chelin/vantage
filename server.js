@@ -104,6 +104,7 @@ const state = {
   scanning: false,
   scanningDeep: null,
   progress: null,
+  scanSteps: [],
   generatedAt: null,
   durationMs: null,
   error: null,
@@ -165,11 +166,19 @@ function startScan(options = {}) {
   state.scanning = true;
   state.scanningDeep = deep;
   state.progress = 'Starting scan';
+  state.scanSteps = [];
   state.error = null;
 
   const startedAt = Date.now();
+  const markStep = (label, status) => {
+    const active = state.scanSteps.find((s) => s.status === 'active');
+    if (status === 'active' && active) active.status = 'done';
+    state.scanSteps.push({ label, status });
+    if (state.scanSteps.length > 40) state.scanSteps.shift();
+  };
   scanAll((label) => {
     state.progress = label;
+    markStep(label, 'active');
   }, { deep })
     .then(async (data) => {
       state.data = data;
@@ -177,6 +186,7 @@ function startScan(options = {}) {
       state.durationMs = Date.now() - startedAt;
       state.error = null;
       state.deepScan = deep;
+      for (const step of state.scanSteps) if (step.status === 'active') step.status = 'done';
       overview.clearCache();
       cache.clear();
       brew.clearCache();
@@ -185,6 +195,7 @@ function startScan(options = {}) {
     })
     .catch((error) => {
       state.error = error && error.stack ? error.stack : String(error);
+      for (const step of state.scanSteps) if (step.status === 'active') step.status = 'failed';
       console.error('[scan] failed:', error);
     })
     .finally(() => {
@@ -392,6 +403,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         scanning: state.scanning,
         progress: state.progress,
+        steps: state.scanSteps,
         generatedAt: state.generatedAt,
         durationMs: state.durationMs,
         error: state.error,
