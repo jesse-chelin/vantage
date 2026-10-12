@@ -9,6 +9,7 @@
     "start": "node server.js",
     "scan": "node bin/scan.js",
     "changelog": "node bin/changelog.js",
+    "release": "node bin/release.js",
     "backlog": "node bin/backlog.js",
     "test": "node --test"
   },

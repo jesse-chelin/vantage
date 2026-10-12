@@ -145,13 +145,27 @@ across several releases lists all of them, not just the newest. After an update
 the overlay summarises the pulled changes by category and points you there.
 
 Releases are cut by pushing a version tag — the tag is what defines a version in
-the changelog. A GitHub Action then publishes a GitHub Release whose notes are
-generated from that tag's commits (tags with a hyphen, like `v0.9.0-beta`, are
-marked as pre-releases):
+the changelog, so anything committed after the newest tag shows as "Unreleased"
+until a release is cut. `npm run release` does the whole thing for you: bumps the
+version, tags it, refreshes the changelog, and (with `--push`) pushes both:
 
 ```sh
-git tag v0.9.1 && git push origin v0.9.1
+npm run release patch          # 0.9.0-beta -> 0.9.1-beta
+npm run release minor           # 0.9.0-beta -> 0.10.0-beta
+npm run release major           # 0.9.0-beta -> 1.0.0-beta
+npm run release stable          # 0.9.0-beta -> 0.9.0
+npm run release 0.10.0-rc.1     # explicit version
+npm run release minor --push    # publish (push branch + tag)
+npm run release minor --dry-run # preview without writing
 ```
+
+It runs the test suite first, refuses a dirty tree or an existing tag, and keeps
+a prerelease suffix on bumps (`--stable` drops it, `--pre <tag>` sets it). The
+commit and tag it creates are filtered from the changelog, so releases don't list
+themselves. A GitHub Action then publishes a GitHub Release whose notes are
+generated from that tag's commits (tags with a hyphen, like `v0.9.0-beta`, are
+marked as pre-releases). Prefer to do it by hand? Bump `package.json`, then
+`git tag vX && git push origin main vX` and `npm run changelog`.
 
 ## Web app vs native Mac app
 
