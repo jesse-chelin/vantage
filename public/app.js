@@ -1412,7 +1412,7 @@ function selectBrewPkg(name) {
   renderBrew();
 }
 
-const appsState = { apps: [], selected: null, query: '', filter: 'all', details: new Map(), leftovers: new Map() };
+const appsState = { apps: [], selected: null, query: '', filter: 'all', selectMode: false, selectedPaths: new Set(), details: new Map(), leftovers: new Map() };
 
 function appVisible() {
   const query = appsState.query.trim().toLowerCase();
@@ -1426,6 +1426,7 @@ function appVisible() {
 
 function appsShell() {
   const apps = appsState.apps;
+  const readOnly = Boolean(state.session && state.session.readOnly);
   const userCount = apps.filter((a) => a.root !== '/Applications').length;
   const sysCount = apps.length - userCount;
   const totalSize = apps.reduce((sum, a) => sum + (a.bytes || 0), 0);
@@ -1433,9 +1434,13 @@ function appsShell() {
   return `
     <div class="split split-apps">
       <div class="split-controls apps-controls">
-        <div class="segmented">${seg('all', 'All', apps.length)}${seg('system', 'Applications', sysCount)}${seg('user', 'User', userCount)}</div>
-        <input id="apps-search" class="row-input apps-search" placeholder="Search applications…" autocomplete="off" spellcheck="false" value="${esc(appsState.query)}" />
-        <span class="apps-total faint">${fmtBytes(totalSize)} total</span>
+        <div class="apps-filter-row">
+          <div class="segmented">${seg('all', 'All', apps.length)}${seg('system', 'Applications', sysCount)}${seg('user', 'User', userCount)}</div>
+          <input id="apps-search" class="row-input apps-search" placeholder="Search applications…" autocomplete="off" spellcheck="false" value="${esc(appsState.query)}" />
+          <span class="apps-total faint">${fmtBytes(totalSize)} total</span>
+          ${readOnly ? '' : `<button class="btn small${appsState.selectMode ? ' primary' : ''}" data-apps-select>${appsState.selectMode ? 'Cancel' : 'Select'}</button>`}
+        </div>
+        ${appsBulkHtml()}
       </div>
       <div class="split-list">
         <div class="list" id="apps-list">${appRowsHtml()}</div>
@@ -1444,21 +1449,62 @@ function appsShell() {
     </div>`;
 }
 
+function appsBulkHtml() {
+  if (!appsState.selectMode) return '';
+  const selected = appsState.apps.filter((a) => appsState.selectedPaths.has(a.path));
+  const bytes = selected.reduce((sum, a) => sum + (a.bytes || 0), 0);
+  const none = selected.length === 0;
+  return `<div class="apps-bulk">
+      <span class="apps-bulk-count">${none ? 'Select apps to remove' : `${fmtNum(selected.length)} selected · ${fmtBytes(bytes)}`}</span>
+      <button class="btn small" data-apps-bulk="clear"${none ? ' disabled' : ''}>Clear</button>
+      <button class="btn small" data-apps-bulk="trash"${none ? ' disabled' : ''}>${svg('trash')} Move to Trash…</button>
+      <button class="btn small ghost-danger" data-apps-bulk="remove"${none ? ' disabled' : ''}>Remove completely…</button>
+      <button class="btn small primary" data-apps-bulk="done">Done</button>
+    </div>`;
+}
+
+function renderAppsShell() {
+  if (state.view !== 'apps') return;
+  els.view.innerHTML = appsShell();
+  loadAppsDetail();
+}
+
+function renderAppsBulk() {
+  const wrap = els.view.querySelector('.apps-controls');
+  if (!wrap) return;
+  const existing = wrap.querySelector('.apps-bulk');
+  const html = appsBulkHtml();
+  if (!html) { if (existing) existing.remove(); return; }
+  if (existing) existing.outerHTML = html;
+  else wrap.insertAdjacentHTML('beforeend', html);
+}
+
+function toggleAppSelected(appPath) {
+  if (appsState.selectedPaths.has(appPath)) appsState.selectedPaths.delete(appPath);
+  else appsState.selectedPaths.add(appPath);
+  renderAppsList();
+  renderAppsBulk();
+}
+
 function appRowsHtml() {
   const visible = appVisible();
   return visible.length ? visible.map(appRow).join('') : '<div class="empty-note">No applications match.</div>';
 }
 
 function appRow(app) {
-  const selected = app.path === appsState.selected;
+  const selecting = appsState.selectMode;
+  const selected = !selecting && app.path === appsState.selected;
+  const checked = appsState.selectedPaths.has(app.path);
   const sub = app.root === '/Applications' ? '' : app.root;
-  return `<button class="pkg-row${selected ? ' selected' : ''}" data-app="${esc(app.path)}" data-search="${esc(`${app.name} ${app.root}`.toLowerCase())}">
+  const check = selecting ? `<span class="app-check${checked ? ' on' : ''}" aria-hidden="true">${checked ? svg('check') : ''}</span>` : '';
+  return `<button class="pkg-row${selected ? ' selected' : ''}${checked ? ' checked' : ''}" data-app="${esc(app.path)}" data-search="${esc(`${app.name} ${app.root}`.toLowerCase())}"${selecting ? ` aria-pressed="${checked}"` : ''}>
+    ${check}
     <img class="app-icon" loading="lazy" decoding="async" width="24" height="24" alt="" src="${esc(appIconUrl(app.path, 64))}" />
     <span class="pkg-main">
       <span class="pkg-title"><span class="pkg-name">${esc(app.name)}</span>${sub ? `<span class="pkg-root">${esc(sub)}</span>` : ''}</span>
     </span>
     <span class="row-size">${fmtBytes(app.bytes)}</span>
-    <span class="pkg-chevron">›</span>
+    ${selecting ? '' : '<span class="pkg-chevron">›</span>'}
   </button>`;
 }
 
@@ -2913,7 +2959,9 @@ function refreshAfterAction() {
     case 'apps':
       appsState.details.clear();
       appsState.leftovers.clear();
-      loadAppsDetail();
+      appsState.selectedPaths.clear();
+      appsState.selectMode = false;
+      renderAppsShell();
       break;
     case 'history':
       loadHistory();
@@ -6314,9 +6362,40 @@ els.view.addEventListener('click', (event) => {
     handleActButton(act);
     return;
   }
+  const appsSelect = event.target.closest('[data-apps-select]');
+  if (appsSelect) {
+    appsState.selectMode = !appsState.selectMode;
+    if (!appsState.selectMode) appsState.selectedPaths.clear();
+    renderAppsShell();
+    return;
+  }
+  const appsBulk = event.target.closest('[data-apps-bulk]');
+  if (appsBulk) {
+    const kind = appsBulk.getAttribute('data-apps-bulk');
+    if (kind === 'done') {
+      appsState.selectMode = false;
+      appsState.selectedPaths.clear();
+      renderAppsShell();
+      return;
+    }
+    if (kind === 'clear') {
+      appsState.selectedPaths.clear();
+      renderAppsList();
+      renderAppsBulk();
+      return;
+    }
+    const paths = [...appsState.selectedPaths];
+    if (!paths.length) return;
+    const bytes = appsState.apps.filter((app) => appsState.selectedPaths.has(app.path)).reduce((sum, app) => sum + (app.bytes || 0), 0);
+    appsBulk.dataset.impact = `${fmtNum(paths.length)} app${paths.length === 1 ? '' : 's'} (${fmtBytes(bytes)}) will be moved to the Trash.`;
+    runAction(kind === 'remove' ? 'app.removeMany' : 'app.trashMany', { paths }, appsBulk);
+    return;
+  }
   const appRow = event.target.closest('[data-app]');
   if (appRow) {
-    selectApp(appRow.getAttribute('data-app'));
+    const appPath = appRow.getAttribute('data-app');
+    if (appsState.selectMode) toggleAppSelected(appPath);
+    else selectApp(appPath);
     return;
   }
   const appsFilter = event.target.closest('[data-apps-filter]');
