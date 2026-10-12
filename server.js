@@ -1012,6 +1012,39 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, await onboarding.get());
     }
 
+    if (pathname.startsWith('/api/actions/') && pathname.endsWith('/stream') && req.method === 'POST') {
+      if (READ_ONLY) return sendJson(res, 403, { error: 'Dashboard is in read-only mode' });
+      if (!authorized(req)) return sendJson(res, 403, { error: 'Forbidden' });
+      const id = pathname.slice('/api/actions/'.length, -'/stream'.length);
+      const body = await readBody(req);
+      const meta = getActionMeta(id);
+      if (meta && meta.danger === 'high' && (await webauthn.isEnabled())) {
+        const grant = body && body.webauthnGrant;
+        if (!(await webauthn.verifyGrant(grant))) {
+          return sendJson(res, 403, { error: 'Touch ID verification required for this action' });
+        }
+      }
+      if (body && body.webauthnGrant) delete body.webauthnGrant;
+
+      // Newline-delimited JSON: a "step" per progress event, then one final
+      // "result" or "error". The client renders the steps as they arrive.
+      res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' });
+      let aborted = false;
+      res.on('close', () => { aborted = true; });
+      const emit = (event) => { if (!aborted && !res.writableEnded) res.write(`${JSON.stringify(event)}\n`); };
+      try {
+        const result = await runAction(id, body || {}, emit);
+        overview.clearCache();
+        cache.clear();
+        brew.clearCache();
+        emit({ type: 'result', ...result });
+      } catch (error) {
+        emit({ type: 'error', error: error.message || 'Action failed' });
+      }
+      if (!aborted && !res.writableEnded) res.end();
+      return;
+    }
+
     if (pathname.startsWith('/api/actions/') && req.method === 'POST') {
       if (READ_ONLY) return sendJson(res, 403, { error: 'Dashboard is in read-only mode' });
       if (!authorized(req)) return sendJson(res, 403, { error: 'Forbidden' });

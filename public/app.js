@@ -4837,6 +4837,79 @@ function toast(message, kind = '') {
   }, 3200);
 }
 
+// A reusable, self-updating "task" card for multi-step actions. Any action can
+// stream progress steps (see runStreamingAction); the card shows each one with a
+// pending / active / done / skipped / failed state and a friendly summary line.
+function taskToast({ title, subtitle = '' }) {
+  const dock = els.jobDock || document.body;
+  const card = document.createElement('div');
+  card.className = 'task-card';
+  card.setAttribute('role', 'status');
+  card.setAttribute('aria-live', 'polite');
+  card.innerHTML = `
+    <div class="task-head">
+      <span class="task-glyph"><span class="task-spinner"></span>${svg('bolt')}</span>
+      <div class="task-copy"><strong>${esc(title)}</strong><span class="task-sub">${esc(subtitle)}</span></div>
+      <span class="task-state"></span>
+      <button class="task-close" type="button" aria-label="Dismiss">${svg('xmark')}</button>
+    </div>
+    <ul class="task-steps update-steps"></ul>`;
+  dock.prepend(card);
+
+  const stepsEl = card.querySelector('.task-steps');
+  const nodes = new Map();
+  const controller = {
+    step(event = {}) {
+      const key = event.id || `step-${nodes.size}`;
+      let node = nodes.get(key);
+      if (!node) {
+        node = document.createElement('li');
+        node.className = 'update-step';
+        node.dataset.state = 'pending';
+        node.innerHTML = `<span class="us-mark">${svg('chevron')}</span><span class="us-label"></span>`;
+        stepsEl.appendChild(node);
+        nodes.set(key, node);
+      }
+      const state = event.status || 'active';
+      node.dataset.state = state;
+      node.querySelector('.us-mark').innerHTML = state === 'done' ? svg('check') : state === 'failed' ? svg('warning') : svg('chevron');
+      const label = node.querySelector('.us-label');
+      if (event.label) label.textContent = event.label;
+      if (event.detail) {
+        let detail = node.querySelector('.us-detail');
+        if (!detail) {
+          detail = document.createElement('span');
+          detail.className = 'us-detail';
+          node.appendChild(detail);
+        }
+        detail.textContent = event.detail;
+      }
+      return controller;
+    },
+    subtitle(text) { card.querySelector('.task-sub').textContent = text; return controller; },
+    finish({ ok = true, message = '' } = {}) {
+      card.classList.add(ok ? 'done' : 'failed');
+      const spinner = card.querySelector('.task-spinner');
+      if (spinner) spinner.remove();
+      card.querySelector('.task-state').innerHTML = ok ? svg('check') : svg('warning');
+      if (message) {
+        const note = document.createElement('p');
+        note.className = `task-note${ok ? '' : ' bad'}`;
+        note.textContent = message;
+        card.appendChild(note);
+      }
+      if (ok) setTimeout(() => controller.close(), 3200);
+      return controller;
+    },
+    close() {
+      card.classList.add('closing');
+      setTimeout(() => card.remove(), 200);
+    },
+  };
+  card.querySelector('.task-close').addEventListener('click', () => controller.close());
+  return controller;
+}
+
 // --- modal sheets ----------------------------------------------------------
 
 function finishSheetClose() {
@@ -5219,6 +5292,8 @@ async function runAction(id, params, triggerEl) {
     if (!ok) return;
   }
 
+  if (meta.stream) return runStreamingAction(id, params, triggerEl, meta);
+
   let webauthnGrant;
   if (state.webauthn && state.webauthn.enabled && meta.danger === 'high') {
     if (!touchIdUsable()) {
@@ -5275,6 +5350,103 @@ async function runAction(id, params, triggerEl) {
       toast(error.message, 'error');
     }
   }
+}
+
+// Actions that declare `stream: true` report each step as it happens, so the
+// task card fills in live instead of showing a lone spinner.
+async function runStreamingAction(id, params, triggerEl, meta) {
+  let webauthnGrant;
+  if (state.webauthn && state.webauthn.enabled && meta.danger === 'high') {
+    if (!touchIdUsable()) {
+      toast('Touch ID is required for this action but is not available here. Open Vantage at http://localhost, or turn off “Touch ID for destructive actions” in Settings → Security.', 'error');
+      return;
+    }
+    try {
+      webauthnGrant = await obtainGrant();
+    } catch (error) {
+      toast(error.name === 'NotAllowedError' ? 'Touch ID cancelled, action not run' : (error.message || 'Touch ID verification failed'), 'error');
+      return;
+    }
+    if (!webauthnGrant) {
+      toast('Touch ID verification failed, action not run', 'error');
+      return;
+    }
+  }
+
+  const task = taskToast({ title: meta.label, subtitle: 'Starting…' });
+  markBusy(triggerEl);
+  try {
+    const body = webauthnGrant ? { ...params, webauthnGrant } : { ...params };
+    const result = await streamAction(id, body, task);
+    if (triggerEl && triggerEl.hasAttribute && triggerEl.hasAttribute('data-close-panel')) closePanel();
+    markSuccess(triggerEl);
+    task.finish({ ok: true, message: result.message || 'Done' });
+    toast(result.message || 'Done', 'good');
+    scheduleScan(500);
+    refreshAfterAction();
+    loadOpenclawStatus();
+  } catch (error) {
+    markError(triggerEl, error.message);
+    task.finish({ ok: false, message: error.message });
+    toast(error.message, 'error');
+  }
+}
+
+// POST to the streaming action endpoint and feed each NDJSON progress event into
+// the task card, returning the final result. A 403 (stale token or grant) is
+// retried once with a refreshed session and a fresh grant.
+async function streamAction(id, body, task) {
+  let payload = { ...body };
+  const post = async () => {
+    const response = await fetch(`/api/actions/${id}/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-dashboard-token': state.session.token },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      const error = new Error(data.error || `Request failed (${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
+    return response;
+  };
+
+  let response;
+  try {
+    response = await post();
+  } catch (error) {
+    if (error.status !== 403) throw error;
+    await refreshSession();
+    if (payload.webauthnGrant && touchIdUsable()) {
+      const fresh = await obtainGrant().catch(() => null);
+      if (fresh) payload = { ...payload, webauthnGrant: fresh };
+    }
+    response = await post();
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result = null;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let index;
+    while ((index = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, index).trim();
+      buffer = buffer.slice(index + 1);
+      if (!line) continue;
+      let event;
+      try { event = JSON.parse(line); } catch { continue; }
+      if (event.type === 'step') task.step(event);
+      else if (event.type === 'result') result = event;
+      else if (event.type === 'error') throw new Error(event.error || 'Action failed');
+    }
+  }
+  if (!result) throw new Error('The action finished without a result');
+  return result;
 }
 
 async function openForm(id, triggerEl) {

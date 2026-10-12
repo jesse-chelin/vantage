@@ -192,6 +192,7 @@ Linear-inspired, dark-first, keyboard-driven.
 | `GET` | `/api/session` | Token + read-only flag |
 | `GET`/`POST` | `/api/inventory` · `/api/scan` | Inventory / rescan |
 | `GET`/`POST` | `/api/actions` · `/api/actions/:id` | Management actions |
+| `POST` | `/api/actions/:id/stream` | Actions that stream progress steps (NDJSON) |
 | `GET` | `/api/jobs` · `/api/jobs/:id?cursor=` | Job status/output |
 | `GET` | `/api/metrics/live` · `/api/metrics/series?minutes=` | Metrics |
 | `GET` | `/api/disk/tree?path=` · `/api/reclaim` | Disk tree / reclaimable |
