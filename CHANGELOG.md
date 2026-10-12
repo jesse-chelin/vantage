@@ -3,6 +3,25 @@
 All notable changes to Vantage are documented here.
 This file is generated from the git history. Refresh it with `npm run changelog`.
 
+## v0.11.0-beta (2026-10-12)
+
+### New features
+
+- Bulk app actions with live per-app progress ([dc7ba13](https://github.com/jesse-chelin/vantage/commit/dc7ba13))
+- Stream friendly progress steps for multi-step actions ([8f4738e](https://github.com/jesse-chelin/vantage/commit/8f4738e))
+- Remove apps completely (bundle + leftovers), harden app Trash ([061b4ad](https://github.com/jesse-chelin/vantage/commit/061b4ad))
+
+### Fixes
+
+- Round the task-card spinner and show the target app ([a917099](https://github.com/jesse-chelin/vantage/commit/a917099))
+- Make app removal survive macOS App Management ([c7e7bdb](https://github.com/jesse-chelin/vantage/commit/c7e7bdb))
+- Pad the detail action footer ([54462f5](https://github.com/jesse-chelin/vantage/commit/54462f5))
+- Align the Applications toolbar and detail panel ([a4076cf](https://github.com/jesse-chelin/vantage/commit/a4076cf))
+
+### Documentation
+
+- Show the correct npm flag form for releases ([4e61228](https://github.com/jesse-chelin/vantage/commit/4e61228))
+
 ## v0.10.0-beta (2026-10-12)
 
 ### New features
