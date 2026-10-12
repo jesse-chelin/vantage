@@ -116,9 +116,25 @@ test('deriveBurn projects the month from the recent window', () => {
     { ts: now, total: 50 },
   ];
   const burn = spend.deriveBurn(samples, { week: 50, month: 50, total: 50, source: 'api' }, 'api');
-  assert.equal(burn.basis, 'last 7 days');
+  assert.equal(burn.reliable, true);
+  assert.equal(burn.basis, '4.0 days');
   assert.equal(burn.perDay, 12.5);
   assert.ok(burn.projectedMonth >= 50);
+});
+
+test('deriveBurn refuses to extrapolate from a tiny history window', () => {
+  const now = Date.now();
+  const samples = [
+    { ts: now - 10 * 60_000, total: 74.7 },
+    { ts: now - 5 * 60_000, total: 74.0 },
+    { ts: now, total: 73.14 },
+  ];
+  const spendBuckets = spend.deriveSpend(samples);
+  const burn = spend.deriveBurn(samples, spendBuckets, 'api');
+  assert.equal(burn.reliable, false);
+  assert.equal(burn.perDay, null);
+  assert.equal(burn.projectedMonth, null);
+  assert.equal(burn.basis, null);
 });
 
 test('balance samples older than the retention window are pruned', async () => {

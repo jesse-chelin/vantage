@@ -2549,8 +2549,16 @@ function spendBody(data) {
   ];
 
   const series = (data.balanceSeries || []).map((point) => point.total);
+  const lo = series.length ? Math.min(...series) : 0;
+  const hi = series.length ? Math.max(...series) : 0;
+  const flat = series.length >= 2 && hi === lo;
+  const span = hi - lo;
+  const pad = span > 0 ? span * 0.25 : Math.max(0.5, hi * 0.02);
+  const caption = flat
+    ? `${esc(fmtMoney(hi, currency))} · no change yet`
+    : `${esc(fmtMoney(series[series.length - 1], currency))} now · low ${esc(fmtMoney(lo, currency))}`;
   const chart = series.length >= 2
-    ? `<div class="pad"><div class="chart-label"><span>Balance</span><span class="chart-stat">${esc(fmtMoney(series[series.length - 1], currency))} now · low ${esc(fmtMoney(Math.min(...series), currency))}</span></div>${areaChart(series, { height: 120, color: '#4cc2c4' })}</div>`
+    ? `<div class="pad"><div class="chart-label"><span>Balance</span><span class="chart-stat">${caption}</span></div>${areaChart(series, { height: 120, color: '#4cc2c4', min: lo - pad, max: hi + pad })}</div>`
     : data.connected
       ? spendEmpty('pulse', 'Building balance history', 'Vantage records a sample every time the balance is checked. Come back after a second sample to see the trend.')
       : spendEmpty('dollar', 'No live balance yet', 'Connect a DeepSeek API key to sample your balance over time and derive spend automatically.', '<button class="btn small primary" data-open-settings="cloudspend">Connect DeepSeek</button>');
@@ -2579,10 +2587,11 @@ function spendBody(data) {
   const sampleHint = data.sampleCount ? `${data.sampleCount} sample${data.sampleCount === 1 ? '' : 's'}` : 'no samples yet';
 
   const burn = data.burn || {};
+  const reliable = burn.reliable !== false && burn.perDay != null;
   const forecastRows =
-    sInfoRow('pulse', 'Burn rate', burn.basis ? `Averaged over the ${burn.basis}.` : 'Not enough history yet.', `<span class="sr-value">${esc(fmtMoney(burn.perDay, currency))}<span class="faint"> / day</span></span>`) +
-    sInfoRow('history', 'Projected month', `${burn.daysLeftInMonth || 0} day${burn.daysLeftInMonth === 1 ? '' : 's'} left in the month.`, `<span class="sr-value">${esc(fmtMoney(burn.projectedMonth, currency))}</span>`) +
-    sInfoRow('clock', 'Balance lasts', burn.balanceDays ? 'At the current burn rate.' : 'Needs a burn rate and a positive balance.', `<span class="sr-value">${burn.balanceDays ? `~${burn.balanceDays} day${burn.balanceDays === 1 ? '' : 's'}` : '–'}</span>`);
+    sInfoRow('pulse', 'Burn rate', reliable ? `Averaged over ${burn.basis}.` : 'Collecting history — a daily rate needs about a day of samples.', `<span class="sr-value">${reliable ? `${esc(fmtMoney(burn.perDay, currency))}<span class="faint"> / day</span>` : '–'}</span>`) +
+    sInfoRow('history', 'Projected month', reliable ? `${burn.daysLeftInMonth || 0} day${burn.daysLeftInMonth === 1 ? '' : 's'} left in the month.` : 'Once there is enough history.', `<span class="sr-value">${reliable ? esc(fmtMoney(burn.projectedMonth, currency)) : '–'}</span>`) +
+    sInfoRow('clock', 'Balance lasts', burn.balanceDays ? 'At the current burn rate.' : reliable ? 'No burn to project from yet.' : 'Once there is enough history.', `<span class="sr-value">${burn.balanceDays ? `about ${burn.balanceDays} day${burn.balanceDays === 1 ? '' : 's'}` : '–'}</span>`);
 
   const config = data.config || { alerts: {} };
   const budget = config.budget || 0;
@@ -2593,11 +2602,11 @@ function spendBody(data) {
 
   return `${hero}
     <div class="grid stats">${tiles.map(statTile).join('')}</div>
-    <div class="group"><div class="group-title">Balance history <span class="hint">${sampleHint}</span></div>${card(chart)}</div>
+    ${group('Balance history', sampleHint, card(chart))}
     ${budgetBlock}
-    ${settingsGroup('Forecast', forecastRows)}
+    ${group('Forecast', null, card(forecastRows))}
     ${group('Ledger', 'manual entries', card(`${ledgerForm}<div class="rows">${ledgerRows}</div>`))}
-    ${settingsGroup('DeepSeek API', sInfoRow('key', 'API key', data.connected ? 'Stored locally, used only to read your balance.' : 'Connect DeepSeek to sample your live balance and derive spend.', apiControl) + errorRow)}
+    ${group('DeepSeek API', null, card(sInfoRow('key', 'API key', data.connected ? 'Stored locally, used only to read your balance.' : 'Connect DeepSeek to sample your live balance and derive spend.', apiControl) + errorRow))}
     <p class="settings-note">Spend is derived from drops between balance samples; top-ups are tracked separately. Vantage samples the balance in the background, so alerts keep working with this page closed.</p>`;
 }
 
