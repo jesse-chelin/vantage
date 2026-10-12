@@ -3,7 +3,13 @@
 All notable changes to Vantage are documented here.
 This file is generated from the git history. Refresh it with `npm run changelog`.
 
-## Unreleased (2026-10-09)
+## Unreleased (2026-10-12)
+
+### Added
+
+- Track DeepSeek cloud spend and add section visibility settings ([c9a9dfe](https://github.com/jesse-chelin/vantage/commit/c9a9dfe))
+- Add agent backlog: structured store, CLI, worker agent and command ([b6bc51f](https://github.com/jesse-chelin/vantage/commit/b6bc51f))
+- Add onboarding reviewer to the swarm; record first-run and core-dashboard audit ([122f833](https://github.com/jesse-chelin/vantage/commit/122f833))
 
 ### Fixed
 
