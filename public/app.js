@@ -5373,7 +5373,8 @@ async function runStreamingAction(id, params, triggerEl, meta) {
     }
   }
 
-  const task = taskToast({ title: meta.label, subtitle: 'Starting…' });
+  const target = params.name ? String(params.name) : params.path ? baseName(params.path).replace(/\.app$/, '') : '';
+  const task = taskToast({ title: meta.label, subtitle: target || 'Starting…' });
   markBusy(triggerEl);
   try {
     const body = webauthnGrant ? { ...params, webauthnGrant } : { ...params };
