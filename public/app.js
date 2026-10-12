@@ -1412,7 +1412,7 @@ function selectBrewPkg(name) {
   renderBrew();
 }
 
-const appsState = { apps: [], selected: null, query: '', filter: 'all', details: new Map() };
+const appsState = { apps: [], selected: null, query: '', filter: 'all', details: new Map(), leftovers: new Map() };
 
 function appVisible() {
   const query = appsState.query.trim().toLowerCase();
@@ -1451,11 +1451,11 @@ function appRowsHtml() {
 
 function appRow(app) {
   const selected = app.path === appsState.selected;
-  return `<button class="pkg-row${selected ? ' selected' : ''}" data-app="${esc(app.path)}">
-    <img class="app-icon" loading="lazy" decoding="async" width="22" height="22" alt="" src="${esc(appIconUrl(app.path, 64))}" />
+  const sub = app.root === '/Applications' ? '' : app.root;
+  return `<button class="pkg-row${selected ? ' selected' : ''}" data-app="${esc(app.path)}" data-search="${esc(`${app.name} ${app.root}`.toLowerCase())}">
+    <img class="app-icon" loading="lazy" decoding="async" width="24" height="24" alt="" src="${esc(appIconUrl(app.path, 64))}" />
     <span class="pkg-main">
-      <span class="pkg-title"><span class="pkg-name">${esc(app.name)}</span></span>
-      <span class="pkg-desc">${esc(app.root)}</span>
+      <span class="pkg-title"><span class="pkg-name">${esc(app.name)}</span>${sub ? `<span class="pkg-root">${esc(sub)}</span>` : ''}</span>
     </span>
     <span class="row-size">${fmtBytes(app.bytes)}</span>
     <span class="pkg-chevron">›</span>
@@ -1481,6 +1481,14 @@ async function fetchAppDetail(appPath) {
   return info;
 }
 
+async function fetchAppLeftovers(appPath) {
+  if (appsState.leftovers.has(appPath)) return appsState.leftovers.get(appPath);
+  const data = await fetch(`/api/apps/leftovers?path=${encodeURIComponent(appPath)}`, { cache: 'no-store' }).then((r) => r.json());
+  if (data.error) throw new Error(data.error);
+  appsState.leftovers.set(appPath, data);
+  return data;
+}
+
 async function loadAppsDetail() {
   const detail = document.getElementById('apps-detail');
   if (!detail) return;
@@ -1492,7 +1500,9 @@ async function loadAppsDetail() {
   detail.innerHTML = skeletonRows(5);
   try {
     const info = await fetchAppDetail(appPath);
-    detail.innerHTML = appDetailBody(info) + `<div class="detail-actions">${appDetailActions(info)}</div>`;
+    let footprint = null;
+    try { footprint = await fetchAppLeftovers(appPath); } catch { footprint = null; }
+    detail.innerHTML = appDetailBody(info, footprint) + `<div class="detail-actions">${appDetailActions(info, footprint)}</div>`;
   } catch (error) {
     detail.innerHTML = `<div class="empty-note">${esc(error.message)}</div>`;
   }
@@ -1508,7 +1518,21 @@ function selectApp(appPath) {
   loadAppsDetail();
 }
 
-function appDetailBody(info) {
+function appDetailBody(info, footprint) {
+  const leftoverItems = footprint && footprint.items ? footprint.items : [];
+  const leftoverBytes = footprint ? footprint.totalBytes || 0 : 0;
+  const totalBytes = (info.size || 0) + leftoverBytes;
+  const footprintSection = footprint
+    ? `<section class="detail-sec">
+        <h3>Storage footprint</h3>
+        <dl class="kv detail-kv">
+          <dt>App bundle</dt><dd>${fmtBytes(info.size)}</dd>
+          <dt>Leftovers</dt><dd>${footprint.count ? `${fmtNum(footprint.count)} item${footprint.count === 1 ? '' : 's'} · ${fmtBytes(leftoverBytes)}` : 'none found'}</dd>
+          <dt>Total</dt><dd><strong>${fmtBytes(totalBytes)}</strong></dd>
+        </dl>
+        ${leftoverItems.length ? `<div class="leftover-list">${leftoverItems.slice(0, 14).map((item) => `<div class="leftover-row"><span class="leftover-path mono" title="${esc(item.path)}">${esc(prettyLibPath(item.path))}</span><span class="leftover-kind">${esc(item.kind)}</span><span class="leftover-size">${fmtBytes(item.bytes)}</span></div>`).join('')}${leftoverItems.length > 14 ? `<div class="leftover-more">+${leftoverItems.length - 14} more</div>` : ''}</div>` : ''}
+      </section>`
+    : '';
   return `
     <div class="detail-head">
       <div class="detail-icon"><img class="app-icon-lg" loading="lazy" decoding="async" alt="" src="${esc(appIconUrl(info.path, 128))}" /></div>
@@ -1533,6 +1557,7 @@ function appDetailBody(info) {
           <dt>Location</dt><dd class="mono">${esc(info.path)}</dd>
         </dl>
       </section>
+      ${footprintSection}
       <section class="detail-sec">
         <h3>Bundle contents</h3>
         ${(info.contents || []).length ? `<div class="chips">${info.contents.map((c) => `<span class="chip" data-search="${esc(c.toLowerCase())}">${esc(c)}</span>`).join('')}</div>` : '<div class="detail-empty">No contents listed.</div>'}
@@ -1540,11 +1565,23 @@ function appDetailBody(info) {
     </div>`;
 }
 
-function appDetailActions(info) {
+function prettyLibPath(target) {
+  const marker = target.indexOf('/Library/');
+  return marker > 0 ? `~${target.slice(marker)}` : target;
+}
+
+function appDetailActions(info, footprint) {
+  const leftovers = footprint && footprint.count
+    ? { count: footprint.count, bytes: footprint.totalBytes || 0 }
+    : null;
+  const impact = leftovers
+    ? `Also moves ${leftovers.count} leftover item${leftovers.count === 1 ? '' : 's'} (${fmtBytes(leftovers.bytes)}) to the Trash.`
+    : '';
   return [
     `<button class="btn small" data-copy="${esc(info.bundleId || info.path)}">Copy bundle id</button>`,
     info.system ? '' : `<button class="btn small" data-act="app.quit" data-params='${esc(JSON.stringify({ name: info.name }))}' data-close-panel>Quit</button>`,
-    info.system ? '' : `<button class="btn small ghost-danger" data-act="app.trash" data-params='${esc(JSON.stringify({ path: info.path }))}' data-close-panel>Trash…</button>`,
+    info.system ? '' : `<button class="btn small" data-act="app.trash" data-params='${esc(JSON.stringify({ path: info.path }))}' data-close-panel>Trash…</button>`,
+    info.system ? '' : `<button class="btn small ghost-danger" data-act="app.remove" data-params='${esc(JSON.stringify({ path: info.path }))}' data-impact="${esc(impact)}" data-close-panel>Remove completely…</button>`,
   ].filter(Boolean).join('');
 }
 
@@ -2874,6 +2911,7 @@ function refreshAfterAction() {
       break;
     case 'apps':
       appsState.details.clear();
+      appsState.leftovers.clear();
       loadAppsDetail();
       break;
     case 'history':
@@ -5176,21 +5214,41 @@ async function runAction(id, params, triggerEl) {
 
   let webauthnGrant;
   if (state.webauthn && state.webauthn.enabled && meta.danger === 'high') {
+    if (!touchIdUsable()) {
+      toast('Touch ID is required for this action but is not available here. Open Vantage at http://localhost, or turn off “Touch ID for destructive actions” in Settings → Security.', 'error');
+      return;
+    }
     try {
       webauthnGrant = await obtainGrant();
     } catch (error) {
-      toast(error.name === 'NotAllowedError' ? 'Touch ID cancelled, action not run' : error.message, 'error');
+      toast(error.name === 'NotAllowedError' ? 'Touch ID cancelled, action not run' : (error.message || 'Touch ID verification failed'), 'error');
       return;
     }
-    if (!webauthnGrant) return;
+    if (!webauthnGrant) {
+      toast('Touch ID verification failed, action not run', 'error');
+      return;
+    }
   } else if (meta.danger === 'high' && !touchIdNudged && touchIdUsable()) {
     touchIdNudged = true;
     toast('Tip: enable “Touch ID for destructive actions” in Profile → Behaviour', '');
   }
 
   markBusy(triggerEl);
+  const send = (grant) => api(`/api/actions/${id}`, { method: 'POST', body: grant ? { ...params, webauthnGrant: grant } : params });
   try {
-    const result = await api(`/api/actions/${id}`, { method: 'POST', body: webauthnGrant ? { ...params, webauthnGrant } : params });
+    let result;
+    try {
+      result = await send(webauthnGrant);
+    } catch (error) {
+      // Grants are short-lived; if the server rejected ours, take a fresh one and retry once.
+      if (webauthnGrant && /touch id/i.test(error.message) && touchIdUsable()) {
+        const fresh = await obtainGrant().catch(() => null);
+        if (!fresh) throw error;
+        result = await send(fresh);
+      } else {
+        throw error;
+      }
+    }
     if (triggerEl && triggerEl.hasAttribute && triggerEl.hasAttribute('data-close-panel')) closePanel();
     if (result.jobId) {
       if (triggerEl) pendingActionButtons.set(result.jobId, triggerEl);

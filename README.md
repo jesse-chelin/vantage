@@ -195,6 +195,7 @@ Linear-inspired, dark-first, keyboard-driven.
 | `GET` | `/api/jobs` · `/api/jobs/:id?cursor=` | Job status/output |
 | `GET` | `/api/metrics/live` · `/api/metrics/series?minutes=` | Metrics |
 | `GET` | `/api/disk/tree?path=` · `/api/reclaim` | Disk tree / reclaimable |
+| `GET` | `/api/apps/detail?path=` · `/api/apps/leftovers?path=` | App bundle info / leftover files |
 | `GET` | `/api/health/checks` · `/api/logs` · `/api/logs/tail` | Health & logs |
 | `GET` | `/api/security` · `/api/network` · `/api/network/ping` · `/api/network/port` | Security & network |
 | `GET` | `/api/spend` | Cloud spend (DeepSeek balance, samples, ledger) |

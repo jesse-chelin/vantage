@@ -728,6 +728,12 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, await apps.detail(target));
     }
 
+    if (pathname === '/api/apps/leftovers') {
+      const target = url.searchParams.get('path');
+      if (!target) return sendJson(res, 400, { error: 'path is required' });
+      return sendJson(res, 200, await apps.leftovers(target));
+    }
+
     if (pathname === '/api/store/search') {
       const kind = url.searchParams.get('kind') === 'cask' ? 'cask' : 'formula';
       return sendJson(res, 200, { kind, results: await store.search(url.searchParams.get('q'), kind) });
@@ -1033,6 +1039,11 @@ const server = http.createServer(async (req, res) => {
     return serveStatic(res, pathname);
   } catch (error) {
     const status = error && error.status ? error.status : 500;
+    // Touch ID failures are the hardest to diagnose from the browser alone, so
+    // record the exact reason (visible under Settings → Advanced → Diagnostics).
+    if (status >= 400 && error && error.message && (pathname.startsWith('/api/webauthn') || /touch id/i.test(error.message))) {
+      console.warn(`[webauthn] ${req.method} ${pathname} -> ${status} ${error.message}`);
+    }
     return sendJson(res, status, { error: error.message || 'Internal error' });
   }
 });
