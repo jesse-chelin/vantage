@@ -38,6 +38,7 @@ const gallery = require('./lib/gallery');
 const apps = require('./lib/apps');
 const store = require('./lib/store');
 const profile = require('./lib/profile');
+const avatar = require('./lib/avatar');
 const modelInsights = require('./lib/models');
 const overview = require('./lib/overview');
 const comfy = require('./lib/comfy');
@@ -682,6 +683,18 @@ const server = http.createServer(async (req, res) => {
         const stat = await fs.stat(file);
         res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'image/png', 'Content-Length': stat.size, 'Cache-Control': 'no-store' });
         fssync.createReadStream(file).pipe(res);
+      } catch (error) {
+        sendJson(res, error.status || 500, { error: error.message });
+      }
+      return;
+    }
+
+    if (pathname === '/api/avatar') {
+      try {
+        const picture = await avatar.read();
+        if (!picture) return sendJson(res, 404, { error: 'No account picture' });
+        res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'image/jpeg', 'Content-Length': picture.length, 'Cache-Control': 'no-cache' });
+        res.end(picture);
       } catch (error) {
         sendJson(res, error.status || 500, { error: error.message });
       }

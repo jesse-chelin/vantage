@@ -9,7 +9,7 @@
 //   - Cross-origin (e.g. Google Fonts): passed straight through.
 //   - Navigations that miss the network fall back to the cached shell.
 
-const CACHE = 'vantage-shell-v4';
+const CACHE = 'vantage-shell-v6';
 const SHELL = [
   '/',
   '/index.html',

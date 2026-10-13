@@ -112,7 +112,7 @@ let systemAccent = null;
 // The "System" swatch must always show the detected macOS accent, never the
 // currently-selected one (otherwise picking e.g. graphite repaints it grey).
 function systemAccentColor() {
-  return (ACCENTS[systemAccent] || ACCENTS.indigo)[0];
+  return (ACCENTS[systemAccent] || ACCENTS.blue)[0];
 }
 
 function loadPrefs() {
@@ -138,8 +138,8 @@ function hexToRgba(hex, alpha) {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 function applyPrefs() {
-  const name = prefs.accent === 'system' ? systemAccent || 'indigo' : prefs.accent;
-  const pair = ACCENTS[name] || ACCENTS.indigo;
+  const name = prefs.accent === 'system' ? systemAccent || 'blue' : prefs.accent;
+  const pair = ACCENTS[name] || ACCENTS.blue;
   const root = document.documentElement;
   if (root && root.style) {
     root.style.setProperty('--accent', pair[0]);
@@ -434,6 +434,54 @@ const svg = (name, extra = '') => {
     ? `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${ICON_24[name]}</svg>`
     : `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" ${extra}>${ICONS[name] || ''}</svg>`;
 };
+
+// Sidebar/settings icon tiles, in the hues macOS System Settings uses. Each
+// icon sits on a small rounded tile so the sidebar reads like the system pane.
+const ICON_TINTS = {
+  overview: '#5e5ce6',
+  bolt: '#ff9f0a',
+  pulse: '#32ade6',
+  disk: '#8e8e93',
+  network: '#0a84ff',
+  gears: '#8e8e93',
+  gear: '#8e8e93',
+  shield: '#0a84ff',
+  bell: '#ff453a',
+  mug: '#c07a3e',
+  grid: '#0a84ff',
+  box: '#a2845e',
+  shop: '#0a84ff',
+  brain: '#bf5af2',
+  photo: '#32d74b',
+  cube: '#64d2ff',
+  dollar: '#32d74b',
+  bot: '#5e5ce6',
+  history: '#ff9f0a',
+  sparkle: '#ff375f',
+  user: '#8e8e93',
+  cpu: '#5e5ce6',
+  memory: '#5e5ce6',
+  key: '#ffd60a',
+  folder: '#0a84ff',
+  terminal: '#48484a',
+  app: '#8e8e93',
+  monitor: '#8e8e93',
+  link: '#0a84ff',
+  download: '#0a84ff',
+  upload: '#0a84ff',
+  warning: '#ff9f0a',
+  trash: '#ff453a',
+  globe: '#0a84ff',
+  database: '#32ade6',
+  layers: '#5e5ce6',
+  clock: '#8e8e93',
+  film: '#ff375f',
+  music: '#ff375f',
+  camera: '#8e8e93',
+  fingerprint: '#ff375f',
+};
+const tintOf = (name) => ICON_TINTS[name] || 'var(--surface-3)';
+const iconTile = (name, cls = 'ico') => `<span class="${cls}" style="--tint:${tintOf(name)}">${svg(name)}</span>`;
 
 // Machine illustrations for the hero + sidebar (drawn locally so the dashboard
 // stays offline and CSP-clean; keyed off the detected Mac model).
@@ -2618,12 +2666,12 @@ function spendBudgetBar(monthSpend, budget, warnPct, currency) {
 
 function spendNumberRow(config, key, icon, label, help, placeholder) {
   const value = config[key];
-  return `<div class="settings-row"><span class="sr-ico">${svg(icon)}</span><div class="sr-main"><div class="sr-title">${esc(label)}</div><div class="sr-help">${esc(help)}</div></div><div class="sr-control"><input class="settings-input" type="number" min="0" step="1" value="${esc(value ? value : '')}" placeholder="${esc(placeholder || '0')}" data-spend-config="${esc(key)}" aria-label="${esc(label)}"></div></div>`;
+  return `<div class="settings-row"><span class="sr-ico" style="--tint:${tintOf(icon)}">${svg(icon)}</span><div class="sr-main"><div class="sr-title">${esc(label)}</div><div class="sr-help">${esc(help)}</div></div><div class="sr-control"><input class="settings-input" type="number" min="0" step="1" value="${esc(value ? value : '')}" placeholder="${esc(placeholder || '0')}" data-spend-config="${esc(key)}" aria-label="${esc(label)}"></div></div>`;
 }
 
 function spendAlertRow(config, key, icon, label, help) {
   const on = !config.alerts || config.alerts[key] !== false;
-  return `<div class="settings-row"><span class="sr-ico">${svg(icon)}</span><div class="sr-main"><div class="sr-title">${esc(label)}</div><div class="sr-help">${esc(help)}</div></div><div class="sr-control"><label class="switch"><input type="checkbox" data-spend-alert="${esc(key)}" aria-label="${esc(label)}" ${on ? 'checked' : ''}><span class="switch-track"></span></label></div></div>`;
+  return `<div class="settings-row"><span class="sr-ico" style="--tint:${tintOf(icon)}">${svg(icon)}</span><div class="sr-main"><div class="sr-title">${esc(label)}</div><div class="sr-help">${esc(help)}</div></div><div class="sr-control"><label class="switch"><input type="checkbox" data-spend-alert="${esc(key)}" aria-label="${esc(label)}" ${on ? 'checked' : ''}><span class="switch-track"></span></label></div></div>`;
 }
 
 function spendEmpty(icon, title, body, action = '') {
@@ -3822,7 +3870,7 @@ function profileBody(p) {
     .join('')}`;
   return `
     <div class="profile-head">
-      <div class="avatar">${esc(initials(p.fullName || p.username))}</div>
+      <div class="avatar${accountAvatar ? ' has-photo' : ''}"${accountAvatar ? " style=\"background-image:url('/api/avatar')\"" : ''}>${accountAvatar ? '' : esc(initials(p.fullName || p.username))}</div>
       <div><div class="profile-name">${esc(p.fullName || p.username)}</div><div class="faint">${esc(p.username)}@${esc(p.hostname)}</div></div>
     </div>
     <dl class="kv">
@@ -4667,8 +4715,8 @@ function renderNav() {
     const count = v.count && data.summary ? v.count(data) : null;
     const pinned = pins.includes(v.id);
     return `<button class="nav-item${v.id === state.view ? ' active' : ''}" data-view="${v.id}" title="${esc(v.label)}">
-      <span class="ico">${svg(v.icon)}</span><span class="nav-label">${esc(v.label)}</span>${count != null ? `<span class="count">${esc(count)}</span>` : ''}
-      <span class="nav-pin${pinned ? ' on' : ''}" data-pin="${v.id}" title="${pinned ? 'Unpin' : 'Pin to top'}" aria-label="${pinned ? 'Unpin' : 'Pin'} ${esc(v.label)}">${svg('star')}</span>
+      <span class="nav-ico-wrap${pinned ? ' pinned' : ''}">${iconTile(v.icon)}<span class="nav-pin${pinned ? ' on' : ''}" data-pin="${v.id}" title="${pinned ? 'Unpin' : 'Pin to top'}" aria-label="${pinned ? 'Unpin' : 'Pin'} ${esc(v.label)}">${svg('star')}</span></span>
+      <span class="nav-label">${esc(v.label)}</span>${count != null ? `<span class="count">${esc(count)}</span>` : ''}
     </button>`;
   };
   const isAvailable = (v) => {
@@ -4696,7 +4744,7 @@ function renderNav() {
       .join('');
     if (pinnedItems) sections.unshift(`<div class="nav-section"><div class="nav-section-label">Pinned</div>${pinnedItems}</div>`);
   }
-  els.nav.innerHTML = sections.join('') + `<div class="nav-section nav-section-foot"><button class="nav-item${state.view === 'settings' ? ' active' : ''}" data-view="settings" title="Settings (⌘,)"><span class="ico">${svg('gears')}</span><span class="nav-label">Settings</span></button></div>`;
+  els.nav.innerHTML = sections.join('') + `<div class="nav-section nav-section-foot"><button class="nav-item${state.view === 'settings' ? ' active' : ''}" data-view="settings" title="Settings (⌘,)">${iconTile('gears')}<span class="nav-label">Settings</span></button></div>`;
 }
 
 function renderMachineCard() {
@@ -4814,8 +4862,40 @@ function setView(id) {
   closePanel();
   state.view = id;
   if (location.hash.replace(/^#/, '') !== id) location.hash = id;
+  recordHistory(id);
   renderNav();
   navigate(renderView);
+}
+
+// Back/forward through visited sections, like the macOS window toolbar.
+const navHistory = { stack: [], index: -1, silent: false };
+
+function recordHistory(id) {
+  if (navHistory.silent || !id) return;
+  const stack = navHistory.stack.slice(0, navHistory.index + 1);
+  if (stack[stack.length - 1] === id) return;
+  stack.push(id);
+  if (stack.length > 60) stack.shift();
+  navHistory.stack = stack;
+  navHistory.index = stack.length - 1;
+  updateNavArrows();
+}
+
+function updateNavArrows() {
+  const back = document.getElementById('nav-back');
+  const forward = document.getElementById('nav-forward');
+  if (back) back.disabled = navHistory.index <= 0;
+  if (forward) forward.disabled = navHistory.index >= navHistory.stack.length - 1;
+}
+
+function travel(delta) {
+  const next = navHistory.index + delta;
+  if (next < 0 || next >= navHistory.stack.length || next === navHistory.index) return;
+  navHistory.index = next;
+  navHistory.silent = true;
+  setView(navHistory.stack[next]);
+  navHistory.silent = false;
+  updateNavArrows();
 }
 
 function render() {
@@ -4823,6 +4903,7 @@ function render() {
   renderMachineCard();
   renderModeBadge();
   renderView();
+  if (navHistory.index === -1) recordHistory(state.view);
 }
 
 function setScanStatus(text, busy) {
@@ -5898,6 +5979,10 @@ els.nav.addEventListener('click', (event) => {
 
 els.searchTrigger.addEventListener('click', openPalette);
 
+// Toolbar back / forward.
+document.getElementById('nav-back')?.addEventListener('click', () => travel(-1));
+document.getElementById('nav-forward')?.addEventListener('click', () => travel(1));
+
 const sidebarToggleBtn = document.getElementById('sidebar-toggle');
 if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', toggleSidebar);
 
@@ -6089,6 +6174,11 @@ document.addEventListener('keydown', (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key === '\\') {
     event.preventDefault();
     toggleSidebar();
+    return;
+  }
+  if ((event.metaKey || event.ctrlKey) && (event.key === '[' || event.key === ']')) {
+    event.preventDefault();
+    travel(event.key === '[' ? -1 : 1);
     return;
   }
   if (event.key === 'Escape') {
@@ -6923,6 +7013,7 @@ window.addEventListener('hashchange', () => {
   const next = location.hash.replace(/^#/, '');
   if (next && next !== state.view) {
     state.view = next;
+    recordHistory(next);
     renderNav();
     navigate(renderView);
   }
@@ -7891,7 +7982,7 @@ function settingRow(entry, caps) {
   const value = settingsState.data.values[entry.id];
   const disabled = entry.requires && !caps[entry.requires];
   const help = disabled ? `Unavailable here, ${settingsReason(entry.requires)}` : entry.help;
-  return `<div class="settings-row">${entry.icon ? `<span class="sr-ico">${svg(entry.icon)}</span>` : ''}<div class="sr-main"><div class="sr-title">${esc(entry.label)}</div>${help ? `<div class="sr-help">${esc(help)}</div>` : ''}</div><div class="sr-control">${settingControl(entry, value, caps)}</div></div>`;
+  return `<div class="settings-row">${entry.icon ? `<span class="sr-ico" style="--tint:${tintOf(entry.icon)}">${svg(entry.icon)}</span>` : ''}<div class="sr-main"><div class="sr-title">${esc(entry.label)}</div>${help ? `<div class="sr-help">${esc(help)}</div>` : ''}</div><div class="sr-control">${settingControl(entry, value, caps)}</div></div>`;
 }
 
 function settingsRows(section) {
@@ -8197,7 +8288,7 @@ function settingsGroup(title, inner) {
 }
 
 function sInfoRow(icon, title, sub, control) {
-  return `<div class="settings-row"><span class="sr-ico">${svg(icon)}</span><div class="sr-main"><div class="sr-title">${esc(title)}</div>${sub ? `<div class="sr-help">${esc(sub)}</div>` : ''}</div><div class="sr-control">${control || ''}</div></div>`;
+  return `<div class="settings-row"><span class="sr-ico" style="--tint:${tintOf(icon)}">${svg(icon)}</span><div class="sr-main"><div class="sr-title">${esc(title)}</div>${sub ? `<div class="sr-help">${esc(sub)}</div>` : ''}</div><div class="sr-control">${control || ''}</div></div>`;
 }
 
 function settingsGeneral() {
@@ -8268,7 +8359,7 @@ function settingsNavigation() {
       const on = viewVisible(v.id);
       const locked = on && visibleCount <= 1;
       const sub = v.title && v.title !== v.label ? v.title : null;
-      return `<div class="settings-row"><span class="sr-ico">${svg(v.icon)}</span><div class="sr-main"><div class="sr-title">${esc(v.label)}</div>${sub ? `<div class="sr-help">${esc(sub)}</div>` : ''}</div><div class="sr-control"><label class="switch"><input type="checkbox" data-setting-view="${esc(v.id)}" aria-label="Show ${esc(v.label)} section" ${on ? 'checked' : ''}${locked ? ' disabled' : ''}><span class="switch-track"></span></label></div></div>`;
+      return `<div class="settings-row"><span class="sr-ico" style="--tint:${tintOf(v.icon)}">${svg(v.icon)}</span><div class="sr-main"><div class="sr-title">${esc(v.label)}</div>${sub ? `<div class="sr-help">${esc(sub)}</div>` : ''}</div><div class="sr-control"><label class="switch"><input type="checkbox" data-setting-view="${esc(v.id)}" aria-label="Show ${esc(v.label)} section" ${on ? 'checked' : ''}${locked ? ' disabled' : ''}><span class="switch-track"></span></label></div></div>`;
     })
     .join('');
   return `${settingsGroup(`Sections · ${visibleCount} of ${views.length} shown`, rows)}
@@ -8389,7 +8480,7 @@ function settingsCapabilities() {
   ];
   const ok = rows.filter((r) => r.ok).length;
   return `${settingsGroup(`Capabilities · ${ok} of ${rows.length} available`,
-    rows.map((row) => `<div class="settings-row"><span class="sr-ico">${svg(row.icon)}</span><div class="sr-main"><div class="sr-title">${esc(row.title)}</div><div class="sr-help">${esc(row.help)}</div></div><div class="sr-control">${row.ok ? pill('available', 'good') : pill('not available', '')}${row.action || ''}</div></div>`).join('')
+    rows.map((row) => `<div class="settings-row"><span class="sr-ico" style="--tint:${tintOf(row.icon)}">${svg(row.icon)}</span><div class="sr-main"><div class="sr-title">${esc(row.title)}</div><div class="sr-help">${esc(row.help)}</div></div><div class="sr-control">${row.ok ? pill('available', 'good') : pill('not available', '')}${row.action || ''}</div></div>`).join('')
   )}
   <p class="settings-note">Availability is detected per browser and context. “Not available” means the current browser or origin can’t do it, try the native app or <span class="mono">http://localhost</span>.</p>`;
 }
@@ -8473,7 +8564,7 @@ function renderSettingsView() {
     return;
   }
   const items = settingsState.data.sections
-    .map((s) => `<button class="settings-nav-item${s.id === settingsState.section ? ' active' : ''}" data-settings-nav="${s.id}">${svg(s.icon)}<span>${esc(s.label)}</span></button>`)
+    .map((s) => `<button class="settings-nav-item${s.id === settingsState.section ? ' active' : ''}" data-settings-nav="${s.id}">${iconTile(s.icon)}<span>${esc(s.label)}</span></button>`)
     .join('');
   els.view.innerHTML = `<div class="settings-layout">
     <nav class="settings-subnav"><div class="settings-subnav-items">${items}</div></nav>
@@ -9585,6 +9676,31 @@ document.addEventListener('keydown', (event) => {
 
 // --- boot ------------------------------------------------------------------
 
+// The macOS account picture, when the server can read it from the local
+// directory service. Falls back to the letter avatar everywhere.
+let accountAvatar = false;
+
+function loadAccountAvatar() {
+  const host = document.querySelector('.workspace-avatar');
+  if (!host) return;
+  const probe = new Image();
+  probe.onload = () => {
+    accountAvatar = true;
+    host.classList.add('has-photo');
+    host.style.backgroundImage = "url('/api/avatar')";
+    host.textContent = '';
+    // The profile panel may already be open; refresh it with the picture.
+    const open = document.querySelector('.panel .avatar');
+    if (open && !open.classList.contains('has-photo')) {
+      open.classList.add('has-photo');
+      open.style.backgroundImage = "url('/api/avatar')";
+      open.textContent = '';
+    }
+  };
+  probe.onerror = () => { accountAvatar = false; };
+  probe.src = '/api/avatar';
+}
+
 // Asks the server which icon ids it has as real SF Symbols, then re-renders so
 // the whole UI swaps from the built-in line icons to the system symbols.
 async function loadSymbols() {
@@ -9607,6 +9723,7 @@ async function loadSymbols() {
 (async function init() {
   if (typeof location !== 'undefined' && location.search && location.search.includes('app=1') && document.body) document.body.classList.add('native-app');
   applyPrefs();
+  loadAccountAvatar();
   loadSymbols();
   api('/api/system').then((s) => {
     if (s && s.accent) {
